@@ -1,0 +1,20 @@
+Temporary breakpoint 1 at 0xb818
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/arm-linux-gnueabihf/libthread_db.so.1".
+[34m--------------------------------------------------------------------------[34m[1m[regs]
+[0m  [32mR0:[31m  0xB6FE85A4  [32mR1:[31m 0xB6FF3868  [32mR2:[30m  0x00000000  [32mR3:[31m  0xBEFFF76C
+  [32mR4:[30m  0x00000000  [32mR5:[30m 0x00000000  [32mR6:[31m  0x0000B818  [32mR7:[30m  0x00000000
+  [32mR8:[30m  0x00000000  [32mR9:[30m 0x00000000  [32mR10:[31m 0xB6FFF000  [32mR11:[30m 0x00000000 Error while running hook_stop:
+Attempt to extract a component of a value that is not a structure pointer.
+
+Temporary breakpoint 1, 0x0000b818 in _start ()
+[New Thread 0xb1bee440 (LWP 5544)]
+
+Program received signal SIGSEGV, Segmentation fault.
+[34m--------------------------------------------------------------------------[34m[1m[regs]
+[0m  [32mR0:[31m  0x800F37D8  [32mR1:[31m 0x00CE11E8  [32mR2:[31m  0x00080000  [32mR3:[31m  0xB5E9B004
+  [32mR4:[31m  0xB5FA3010  [32mR5:[31m 0x000800F3  [32mR6:[31m  0x00000FFF  [32mR7:[31m  0xB3999438
+  [32mR8:[30m  0x00000000  [32mR9:[31m 0xFFFFFFFF  [32mR10:[31m 0xFFFD0ACC  [32mR11:[31m 0xB5A9A000 Error while running hook_stop:
+Attempt to extract a component of a value that is not a structure pointer.
+dyna_linker () at linkage_arm.S:210
+210		ldr	r7, [r1]
