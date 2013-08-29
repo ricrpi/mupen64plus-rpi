@@ -39,13 +39,22 @@
 #endif
 
 #include "bcm_host.h"
+#include <GLES2/gl2.h>
+#include <EGL/egl.h>
+#include <EGL/eglplatform.h>
+#include "esUtil.h"
+
+//
+int Init ( ESContext *esContext );
+void Draw ( ESContext *esContext );
+
 
 /* local variables */
 static m64p_video_extension_functions l_ExternalVideoFuncTable = {10, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 static int l_VideoExtensionActive = 0;
 static int l_VideoOutputActive = 0;
 static int l_Fullscreen = 0;
-static SDL_Surface *l_pScreen = NULL;
+ ESContext esContext;
 
 /* global function for use by frontend.c */
 m64p_error OverrideVideoFunctions(m64p_video_extension_functions *VideoFunctionStruct)
@@ -99,9 +108,9 @@ EXPORT m64p_error CALL VidExt_Init(void)
         return (*l_ExternalVideoFuncTable.VidExtFuncInit)();
 
     bcm_host_init();
-DebugMessage(M64MSG_INFO, "SDL_Init(SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE)");
-SDL_Init(SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE);
-	DebugMessage(M64MSG_INFO, "SDL_InitSubSystem(SDL_INIT_VIDEO");
+
+    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE);
+
     if (SDL_InitSubSystem(SDL_INIT_VIDEO) == -1)
     {
         DebugMessage(M64MSG_ERROR, "SDL video subsystem init failed: %s", SDL_GetError());
@@ -130,7 +139,6 @@ EXPORT m64p_error CALL VidExt_Quit(void)
 
     SDL_ShowCursor(SDL_ENABLE);
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
-    l_pScreen = NULL;
     l_VideoOutputActive = 0;
     StateChanged(M64CORE_VIDEO_MODE, M64VIDEO_NONE);
 
@@ -152,7 +160,8 @@ EXPORT m64p_error CALL VidExt_ListFullscreenModes(m64p_2d_size *SizeArray, int *
         return M64ERR_NOT_INIT;
 
     /* get a list of SDL video modes */
-    videoFlags = SDL_OPENGL | SDL_FULLSCREEN;
+    videoFlags = SDL_OPENGL | 
+SDL_FULLSCREEN;
 
     if ((videoInfo = SDL_GetVideoInfo()) == NULL)
     {
@@ -189,72 +198,14 @@ EXPORT m64p_error CALL VidExt_ListFullscreenModes(m64p_2d_size *SizeArray, int *
 
 EXPORT m64p_error CALL VidExt_SetVideoMode(int Width, int Height, int BitsPerPixel, m64p_video_mode ScreenMode, m64p_video_flags Flags)
 {
-    const SDL_VideoInfo *videoInfo;
-    int videoFlags = 0;
+	m64p_error result;
 
-    /* call video extension override if necessary */
-    if (l_VideoExtensionActive)
-    {
-        m64p_error rval = (*l_ExternalVideoFuncTable.VidExtFuncSetMode)(Width, Height, BitsPerPixel, ScreenMode, Flags);
-        l_Fullscreen = (rval == M64ERR_SUCCESS && ScreenMode == M64VIDEO_FULLSCREEN);
-        l_VideoOutputActive = (rval == M64ERR_SUCCESS);
-        if (l_VideoOutputActive)
-        {
-            StateChanged(M64CORE_VIDEO_MODE, ScreenMode);
-            StateChanged(M64CORE_VIDEO_SIZE, (Width << 16) | Height);
-        }
-        return rval;
-    }
+	result = esInitContext ( &esContext );
 
-    if (!SDL_WasInit(SDL_INIT_VIDEO))
-        return M64ERR_NOT_INIT;
+	if (M64ERR_SUCCESS == result) esCreateWindow ( &esContext, "Mupen64plus", Width, Height, ES_WINDOW_RGB );
+	Init (&esContext );
 
-    /* Get SDL video flags to use */
-    if (ScreenMode == M64VIDEO_WINDOWED)
-    {
-        videoFlags = SDL_OPENGL;
-        if (Flags & M64VIDEOFLAG_SUPPORT_RESIZING)
-            videoFlags |= SDL_RESIZABLE;
-    }
-    else if (ScreenMode == M64VIDEO_FULLSCREEN)
-    {
-        videoFlags = SDL_OPENGL | SDL_FULLSCREEN;
-    }
-    else
-    {
-        return M64ERR_INPUT_INVALID;
-    }
-
-    if ((videoInfo = SDL_GetVideoInfo()) == NULL)
-    {
-        DebugMessage(M64MSG_ERROR, "SDL_GetVideoInfo query failed: %s", SDL_GetError());
-        return M64ERR_SYSTEM_FAIL;
-    }
-    if (videoInfo->hw_available)
-        videoFlags |= SDL_HWSURFACE;
-    else
-        videoFlags |= SDL_SWSURFACE;
-
-    /* set the mode */
-    if (BitsPerPixel > 0)
-        DebugMessage(M64MSG_INFO, "Setting %i-bit video mode: %ix%i", BitsPerPixel, Width, Height);
-    else
-        DebugMessage(M64MSG_INFO, "Setting video mode: %ix%i", Width, Height);
-
-    l_pScreen = SDL_SetVideoMode(Width, Height, BitsPerPixel, videoFlags);
-    if (l_pScreen == NULL)
-    {
-        DebugMessage(M64MSG_ERROR, "%s:%d SDL_SetVideoMode failed: %s", __FILE__ , __LINE__ , SDL_GetError());
-        return M64ERR_SYSTEM_FAIL;
-    }
-
-    SDL_ShowCursor(SDL_DISABLE);
-
-    l_Fullscreen = (ScreenMode == M64VIDEO_FULLSCREEN);
-    l_VideoOutputActive = 1;
-    StateChanged(M64CORE_VIDEO_MODE, ScreenMode);
-    StateChanged(M64CORE_VIDEO_SIZE, (Width << 16) | Height);
-    return M64ERR_SUCCESS;
+	return result;
 }
 
 EXPORT m64p_error CALL VidExt_ResizeWindow(int Width, int Height)
@@ -289,7 +240,8 @@ EXPORT m64p_error CALL VidExt_ResizeWindow(int Width, int Height)
     }
 
     /* Get SDL video flags to use */
-    videoFlags = SDL_OPENGL | SDL_RESIZABLE;
+    videoFlags = SDL_OPENGL | 
+SDL_RESIZABLE;
     if ((videoInfo = SDL_GetVideoInfo()) == NULL)
     {
         DebugMessage(M64MSG_ERROR, "SDL_GetVideoInfo query failed: %s", SDL_GetError());
@@ -302,14 +254,7 @@ EXPORT m64p_error CALL VidExt_ResizeWindow(int Width, int Height)
 
     // destroy the On-Screen Display
     osd_exit();
-
-    /* set the re-sizing the screen will create a new OpenGL context */
-    l_pScreen = SDL_SetVideoMode(Width, Height, 0, videoFlags);
-    if (l_pScreen == NULL)
-    {
-        DebugMessage(M64MSG_ERROR, "%s:%d SDL_SetVideoMode failed: %s"), __FILE__, __LINE__, SDL_GetError();
-        return M64ERR_SYSTEM_FAIL;
-    }
+    
 
     StateChanged(M64CORE_VIDEO_SIZE, (Width << 16) | Height);
     // re-create the On-Screen Display
@@ -356,13 +301,7 @@ EXPORT m64p_error CALL VidExt_ToggleFullScreen(void)
      * this resets the OpenGL context and video plugins don't support it yet.
      * Uncomment the next line to test it: */
     //return VidExt_SetVideoMode(l_pScreen->w, l_pScreen->h, l_pScreen->format->BitsPerPixel, l_Fullscreen ? M64VIDEO_WINDOWED : M64VIDEO_FULLSCREEN);
-    if (SDL_WM_ToggleFullScreen(l_pScreen) == 1)
-    {
-        l_Fullscreen = !l_Fullscreen;
-        StateChanged(M64CORE_VIDEO_MODE, l_Fullscreen ? M64VIDEO_FULLSCREEN : M64VIDEO_WINDOWED);
-        return M64ERR_SUCCESS;
-    }
-
+    
     return M64ERR_SYSTEM_FAIL;
 }
 
@@ -370,12 +309,9 @@ EXPORT void * CALL VidExt_GL_GetProcAddress(const char* Proc)
 {
     /* call video extension override if necessary */
     if (l_VideoExtensionActive)
-        return (*l_ExternalVideoFuncTable.VidExtFuncGLGetProc)(Proc);
+        return (*l_ExternalVideoFuncTable.VidExtFuncGLGetProc)(Proc); 
 
-    if (!SDL_WasInit(SDL_INIT_VIDEO))
-        return NULL;
-
-    return SDL_GL_GetProcAddress(Proc);
+    return glXGetProcAddress(Proc);
 }
 
 typedef struct {
@@ -385,12 +321,12 @@ typedef struct {
 
 static const GLAttrMapNode GLAttrMap[] = {
         { M64P_GL_DOUBLEBUFFER, SDL_GL_DOUBLEBUFFER },
-        { M64P_GL_BUFFER_SIZE,  SDL_GL_BUFFER_SIZE },
-        { M64P_GL_DEPTH_SIZE,   SDL_GL_DEPTH_SIZE },
-        { M64P_GL_RED_SIZE,     SDL_GL_RED_SIZE },
-        { M64P_GL_GREEN_SIZE,   SDL_GL_GREEN_SIZE },
-        { M64P_GL_BLUE_SIZE,    SDL_GL_BLUE_SIZE },
-        { M64P_GL_ALPHA_SIZE,   SDL_GL_ALPHA_SIZE },
+        { M64P_GL_BUFFER_SIZE,  SDL_GL_BUFFER_SIZE },	
+        { M64P_GL_DEPTH_SIZE,   SDL_GL_DEPTH_SIZE },	// GL_DEPTH_BITS
+        { M64P_GL_RED_SIZE,     SDL_GL_RED_SIZE },		// GL_RED_BITS
+        { M64P_GL_GREEN_SIZE,   SDL_GL_GREEN_SIZE },	// GL_GREEN_BITS
+        { M64P_GL_BLUE_SIZE,    SDL_GL_BLUE_SIZE },		// GL_BLUE_BITS
+        { M64P_GL_ALPHA_SIZE,   SDL_GL_ALPHA_SIZE },	// GL_ALPHA_BITS
 #if SDL_VERSION_ATLEAST(1,3,0)
         { M64P_GL_SWAP_CONTROL, SDL_RENDERER_PRESENTVSYNC },
 #else
@@ -415,8 +351,8 @@ EXPORT m64p_error CALL VidExt_GL_SetAttribute(m64p_GLattr Attr, int Value)
     {
         if (GLAttrMap[i].m64Attr == Attr)
         {
-            if (SDL_GL_SetAttribute(GLAttrMap[i].sdlAttr, Value) != 0)
-                return M64ERR_SYSTEM_FAIL;
+           // if (SDL_GL_SetAttribute(GLAttrMap[i].sdlAttr, Value) != 0)
+             //   return M64ERR_SYSTEM_FAIL;
             return M64ERR_SUCCESS;
         }
     }
@@ -440,8 +376,8 @@ EXPORT m64p_error CALL VidExt_GL_GetAttribute(m64p_GLattr Attr, int *pValue)
         if (GLAttrMap[i].m64Attr == Attr)
         {
             int NewValue = 0;
-            if (SDL_GL_GetAttribute(GLAttrMap[i].sdlAttr, &NewValue) != 0)
-                return M64ERR_SYSTEM_FAIL;
+            //if (glGet(GLAttrMap[i].sdlAttr, &NewValue) != 0)
+             //   return M64ERR_SYSTEM_FAIL;
             *pValue = NewValue;
             return M64ERR_SUCCESS;
         }
@@ -452,15 +388,167 @@ EXPORT m64p_error CALL VidExt_GL_GetAttribute(m64p_GLattr Attr, int *pValue)
 
 EXPORT m64p_error CALL VidExt_GL_SwapBuffers(void)
 {
+
+	//Draw(&esContext);
     /* call video extension override if necessary */
     if (l_VideoExtensionActive)
         return (*l_ExternalVideoFuncTable.VidExtFuncGLSwapBuf)();
 
-    if (!SDL_WasInit(SDL_INIT_VIDEO))
-        return M64ERR_NOT_INIT;
+    eglSwapBuffers(esContext.eglDisplay, esContext.eglSurface);
 
-    SDL_GL_SwapBuffers();
     return M64ERR_SUCCESS;
+}
+
+//-----------------------------------------------------------------------
+
+typedef struct
+{
+   // Handle to a program object
+   GLuint programObject;
+
+} UserData;
+
+GLuint LoadShader ( GLenum type, const GLbyte *shaderSrc )
+{
+   GLuint shader;
+   GLint compiled;
+   
+   // Create the shader object
+   shader = glCreateShader ( type );
+
+   if ( shader == 0 )
+   	return 0;
+
+   // Load the shader source
+   glShaderSource ( shader, 1, &shaderSrc, NULL );
+   
+   // Compile the shader
+   glCompileShader ( shader );
+
+   // Check the compile status
+   glGetShaderiv ( shader, GL_COMPILE_STATUS, &compiled );
+
+   if ( !compiled ) 
+   {
+      GLint infoLen = 0;
+
+      glGetShaderiv ( shader, GL_INFO_LOG_LENGTH, &infoLen );
+      
+      if ( infoLen > 1 )
+      {
+         char* infoLog = malloc (sizeof(char) * infoLen );
+
+         glGetShaderInfoLog ( shader, infoLen, NULL, infoLog );
+         DebugMessage(M64MSG_ERROR, "Error compiling shader:\n%s\n", infoLog );            
+         
+         free ( infoLog );
+      }
+
+      glDeleteShader ( shader );
+      return 0;
+   }
+
+   return shader;
+
+}
+
+int Init ( ESContext *esContext )
+{
+   esContext->userData = malloc(sizeof(UserData));
+
+   UserData *userData = esContext->userData;
+   GLbyte vShaderStr[] =  
+      "attribute vec4 vPosition;    \n"
+      "void main()                  \n"
+      "{                            \n"
+      "   gl_Position = vPosition;  \n"
+      "}                            \n";
+   
+   GLbyte fShaderStr[] =  
+      "precision mediump float;\n"\
+      "void main()                                  \n"
+      "{                                            \n"
+      "  gl_FragColor = vec4 ( 1.0, 0.0, 0.0, 1.0 );\n"
+      "}                                            \n";
+
+   GLuint vertexShader;
+   GLuint fragmentShader;
+   GLuint programObject;
+   GLint linked;
+
+   // Load the vertex/fragment shaders
+   vertexShader = LoadShader ( GL_VERTEX_SHADER, vShaderStr );
+   fragmentShader = LoadShader ( GL_FRAGMENT_SHADER, fShaderStr );
+
+   // Create the program object
+   programObject = glCreateProgram ( );
+   
+   if ( programObject == 0 )
+      return 0;
+
+   glAttachShader ( programObject, vertexShader );
+   glAttachShader ( programObject, fragmentShader );
+
+   // Bind vPosition to attribute 0   
+   glBindAttribLocation ( programObject, 0, "vPosition" );
+
+   // Link the program
+   glLinkProgram ( programObject );
+
+   // Check the link status
+   glGetProgramiv ( programObject, GL_LINK_STATUS, &linked );
+
+   if ( !linked ) 
+   {
+      GLint infoLen = 0;
+
+      glGetProgramiv ( programObject, GL_INFO_LOG_LENGTH, &infoLen );
+      
+      if ( infoLen > 1 )
+      {
+         char* infoLog = malloc (sizeof(char) * infoLen );
+
+         glGetProgramInfoLog ( programObject, infoLen, NULL, infoLog );
+         DebugMessage(M64MSG_ERROR, "Error linking program:\n%s\n", infoLog );            
+         
+         free ( infoLog );
+      }
+
+      glDeleteProgram ( programObject );
+      return GL_FALSE;
+   }
+
+   // Store the program object
+   userData->programObject = programObject;
+
+   glClearColor ( 0.0f, 0.0f, 0.0f, 1.0f );
+   return GL_TRUE;
+}
+
+///
+// Draw a triangle using the shader pair created in Init()
+//
+void Draw ( ESContext *esContext )
+{
+   UserData *userData = esContext->userData;
+   GLfloat vVertices[] = {  0.0f,  0.5f, 0.0f, 
+                           -0.5f, -0.5f, 0.0f,
+                            0.5f, -0.5f, 0.0f };
+      
+   // Set the viewport
+   glViewport ( 0, 0, esContext->width, esContext->height );
+   
+   // Clear the color buffer
+   glClear ( GL_COLOR_BUFFER_BIT );
+
+   // Use the program object
+   glUseProgram ( userData->programObject );
+
+   // Load the vertex data
+   glVertexAttribPointer ( 0, 3, GL_FLOAT, GL_FALSE, 0, vVertices );
+   glEnableVertexAttribArray ( 0 );
+
+   glDrawArrays ( GL_TRIANGLES, 0, 3 );
 }
 
 

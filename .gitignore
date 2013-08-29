@@ -1,4 +1,10 @@
 *.zip
-*.v64
+Zelda 64.v64
 *.log
 core
+*.so
+*.so*
+mupen64plus
+_obj
+*.o
+*.d

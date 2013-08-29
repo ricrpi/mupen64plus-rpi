@@ -23,6 +23,7 @@
 
 # detect operating system
 UNAME ?= $(shell uname -s)
+MACHINE ?= $(shell uname -m)
 OS := NONE
 ifeq ("$(UNAME)","Linux")
   OS = LINUX
@@ -121,9 +122,16 @@ endif
 # base CFLAGS, LDLIBS, and LDFLAGS
 OPTFLAGS ?= -flto #-O3
 WARNFLAGS ?= -Wall
-CFLAGS += $(OPTFLAGS) $(WARNFLAGS) -ffast-math -fno-strict-aliasing -fvisibility=hidden -I../../src
-CXXFLAGS += -fvisibility-inlines-hidden
+CFLAGS += $(OPTFLAGS) $(WARNFLAGS) -ffast-math -fno-strict-aliasing -fvisibility=hidden -I../../src -DSDL_VIDEO_OPENGL_ES2=1
+CXXFLAGS += -fvisibility-inlines-hidden -DSDL_VIDEO_OPENGL_ES2=1
 LDFLAGS += $(SHARED)
+
+
+ifeq ("$(MACHINE)","armv6l")
+CFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
+CXXFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
+LDLIBS += -lm -L/opt/vc/lib -lGLESv2 -lEGL -lbcm_host
+endif
 
 ifeq ($(CPU), X86)
   CFLAGS += -msse
@@ -272,9 +280,10 @@ LINK.o = $(Q_LD)$(CXX) $(CXXFLAGS) $(LDFLAGS) $(TARGET_ARCH)
 
 # set special flags for given Makefile parameters
 ifeq ($(DEBUG),1)
-  CFLAGS += -g
+  #CFLAGS += -g
   INSTALL_STRIP_FLAG ?= 
 else
+  CFLAGS += -O3
   ifneq ($(OS),OSX)
     INSTALL_STRIP_FLAG ?= -s
   endif

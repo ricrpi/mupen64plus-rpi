@@ -35,7 +35,9 @@
 
 
 #elif SDL_VIDEO_OPENGL_ES2
-#include <SDL_opengles2.h>
+//#include <SDL_opengles2.h>
+#include <GLES2/gl2.h>
+#include <EGL/egl.h>
 #define GLSL_VERSION "100"
 
 // Extension names

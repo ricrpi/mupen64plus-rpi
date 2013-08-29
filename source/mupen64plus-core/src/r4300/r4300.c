@@ -582,9 +582,10 @@ void jump_to_func(void)
     blocks[addr>>12]->end = (addr & ~0xFFF) + 0x1000;
     init_block(blocks[addr>>12]);
      }
+	
    PC=actual->block+((addr-actual->start)>>2);
-   
-   if (r4300emu == CORE_DYNAREC) dyna_jump();
+   	
+	if (r4300emu == CORE_DYNAREC) dyna_jump();
 }
 #undef addr
 
@@ -1012,8 +1013,11 @@ void r4300_execute(void)
 
 #ifdef NEW_DYNAREC
         new_dynarec_init();
+
         new_dyna_start();
+	
         new_dynarec_cleanup();
+    
 #else
         dyna_start(dynarec_setup_code);
         PC++;

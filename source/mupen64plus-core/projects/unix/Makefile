@@ -23,6 +23,7 @@
 
 # detect operating system
 UNAME ?= $(shell uname -s)
+MACHINE ?= $(shell uname -m)
 OS := NONE
 ifeq ("$(UNAME)","Linux")
   OS = LINUX
@@ -93,9 +94,9 @@ ifneq ("$(filter arm%,$(HOST_CPU))","")
   ifeq ("$(filter arm%b,$(HOST_CPU))","")
     CPU := ARM
     ARCH_DETECTED := 32BITS
-    PIC ?= 1cd
+    PIC ?= 1
     NEW_DYNAREC := 1
-    CFLAGS += -mfpu=vfp #-mfloat-abi=softfp
+    CFLAGS += -mfpu=vfp
     $(warning Architecture "$(HOST_CPU)" not officially supported.')
   endif
 endif
@@ -104,11 +105,16 @@ ifeq ("$(CPU)","NONE")
 endif
 
 # base CFLAGS, LDLIBS, and LDFLAGS
-OPTFLAGS ?= -flto #-O3
-WARNFLAGS ?= #-Wall
-CFLAGS += $(OPTFLAGS) $(WARNFLAGS) -ffast-math -fno-strict-aliasing -fvisibility=hidden -I../../src -DM64P_PARALLEL -DARMv5_ONLY -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
-CXXFLAGS += -fvisibility-inlines-hidden -DARMv5_ONLY
-LDLIBS +=  -lm -L/opt/vc/lib -lbcm_host
+OPTFLAGS ?= -flto
+WARNFLAGS ?= -Wall
+CFLAGS += $(OPTFLAGS) $(WARNFLAGS) -ffast-math -fno-strict-aliasing -fvisibility=hidden -I../../src -DM64P_PARALLEL 
+CXXFLAGS += -fvisibility-inlines-hidden
+
+ifeq ("$(MACHINE)","armv6l")
+CFLAGS += -DARMv5_ONLY -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
+CXXFLAGS += -DARMv5_ONLY
+LDLIBS += -lm -L/opt/vc/lib -lGLESv2 -lEGL -lbcm_host 
+endif
 
 # Since we are building a shared library, we must compile with -fPIC on some architectures
 # On 32-bit x86 systems we do not want to use -fPIC because we don't have to and it has a big performance penalty on this arch
@@ -291,7 +297,7 @@ INSTALL  ?= install
 MKDIR ?= mkdir -p
 COMPILE.c = $(Q_CC)$(CC) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
 COMPILE.cc = $(Q_CXX)$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
-LINK.o = $(Q_LD)$(CXX) $(patsubst -O3,-O2,$(CXXFLAGS)) $(LDFLAGS) $(TARGET_ARCH)
+LINK.o = $(Q_LD)$(CXX) -g $(patsubst -O3,-O2,$(CXXFLAGS)) $(LDFLAGS) $(TARGET_ARCH)
 
 ifeq ($(OS),OSX)
   LDCONFIG ?= true  # no 'ldconfig' under OSX
@@ -319,6 +325,7 @@ else
     LDFLAGS += -g
     INSTALL_STRIP_FLAG ?= 
   else
+    CFLAGS += -O3
     ifneq ($(OS),OSX)
       INSTALL_STRIP_FLAG ?= -s
 	endif
@@ -377,6 +384,7 @@ SOURCE = \
 	$(SRCDIR)/api/debugger.c \
 	$(SRCDIR)/api/frontend.c \
 	$(SRCDIR)/api/vidext.c \
+	$(SRCDIR)/api/esUtil.c \
 	$(SRCDIR)/main/main.c \
 	$(SRCDIR)/main/util.c \
 	$(SRCDIR)/main/cheat.c \
@@ -580,7 +588,7 @@ $(OBJDIR)/r4300/new_dynarec/new_dynarec.o: $(SRCDIR)/r4300/new_dynarec/new_dynar
 
 # standard build rules
 $(OBJDIR)/%.o: $(SRCDIR)/%.S
-	$(COMPILE.c) -o $@ $<
+	$(COMPILE.c) -mlong-calls -o $@ $<
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	$(COMPILE.c) -o $@ $<

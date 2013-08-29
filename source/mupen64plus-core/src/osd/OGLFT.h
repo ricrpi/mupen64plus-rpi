@@ -30,7 +30,8 @@
 #include <wchar.h>
 
 #define GL_GLEXT_PROTOTYPES
-#include <SDL_opengl.h>
+
+
 #if defined(__MACOSX__)
 #include <OpenGL/glu.h>
 #elif defined(__MACOS__)

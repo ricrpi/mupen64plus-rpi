@@ -973,7 +973,7 @@ EXPORT void CALL ReadScreen2(void *dest, int *width, int *height, int bFront)
     if (dest == NULL)
         return;
 
-#if SDL_VIDEO_OPENGL
+//#if SDL_VIDEO_OPENGL
     GLint oldMode;
     glGetIntegerv( GL_READ_BUFFER, &oldMode );
     if (bFront)
@@ -981,9 +981,10 @@ EXPORT void CALL ReadScreen2(void *dest, int *width, int *height, int bFront)
     else
         glReadBuffer( GL_BACK );
     glReadPixels( 0, 0, windowSetting.uDisplayWidth, windowSetting.uDisplayHeight,
-                 GL_RGB, GL_UNSIGNED_BYTE, dest );
+                 GL_RGBA, GL_UNSIGNED_BYTE, dest );
+
     glReadBuffer( oldMode );
-#endif
+//#endif
 }
     
 

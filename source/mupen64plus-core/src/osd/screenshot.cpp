@@ -24,7 +24,8 @@
 #include <stdio.h>
 #include <ctype.h>
 
-#include <SDL_opengl.h>
+#include <GLES2/gl2.h>
+#include <EGL/egl.h>
 #include <SDL.h>
 #include <png.h>
 
@@ -110,7 +111,7 @@ static int SaveRGBBufferToFile(const char *filename, const unsigned char *buf, i
     // set function pointers in the PNG library, for write callbacks
     png_set_write_fn(png_write, (png_voidp) savefile, user_write_data, user_flush_data);
     // set the info
-    png_set_IHDR(png_write, png_info, width, height, 8, PNG_COLOR_TYPE_RGB,
+    png_set_IHDR(png_write, png_info, width, height, 8, PNG_COLOR_TYPE_RGB_ALPHA,
                  PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
     // allocate row pointers and scale each row to 24-bit color
     png_byte **row_pointers;
@@ -210,7 +211,7 @@ extern "C" void TakeScreenshot(int iFrameNumber)
     gfx.readScreen(NULL, &width, &height, 0);
 
     // allocate memory for the image
-    unsigned char *pucFrame = (unsigned char *) malloc(width * height * 3);
+    unsigned char *pucFrame = (unsigned char *) malloc(width * height * 4);
     if (pucFrame == NULL)
     {
         free(filename);
@@ -221,7 +222,7 @@ extern "C" void TakeScreenshot(int iFrameNumber)
     gfx.readScreen(pucFrame, &width, &height, 0);
 
     // write the image to a PNG
-    SaveRGBBufferToFile(filename, pucFrame, width, height, width * 3);
+    SaveRGBBufferToFile(filename, pucFrame, width, height, width * 4);
     // free the memory
     free(pucFrame);
     free(filename);

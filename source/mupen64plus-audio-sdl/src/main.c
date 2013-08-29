@@ -356,8 +356,9 @@ EXPORT void CALL AiDacrateChanged( int SystemType )
 EXPORT void CALL AiLenChanged( void )
 {
     unsigned int LenReg;
-    unsigned char *p;
+    volatile unsigned char *p;
     unsigned int CurrLevel, CurrTime, ExpectedLevel, ExpectedTime;
+	static unsigned char carryover[2] = {0, 0};
 
     if (critical_failure == 1)
         return;
@@ -367,14 +368,30 @@ EXPORT void CALL AiLenChanged( void )
     LenReg = *AudioInfo.AI_LEN_REG;
     p = AudioInfo.RDRAM + (*AudioInfo.AI_DRAM_ADDR_REG & 0xFFFFFF);
 
+	
     if (buffer_pos + LenReg < primaryBufferBytes)
     {
-        unsigned int i;
+		SDL_LockAudio();
+#if 1
+		if(SwapChannels == 0)
+        {	
+			// Not quite the same (one channel ahead of other by one sample) but shouldn't be noticable
 
-        SDL_LockAudio();
-        for ( i = 0 ; i < LenReg ; i += 4 )
+			primaryBuffer[ buffer_pos ] = carryover[0];
+			primaryBuffer[ buffer_pos + 1 ] = carryover[1];
+				
+			memcpy(&primaryBuffer[ buffer_pos + 2 ], (const char*)p, LenReg - 2);
+				
+			carryover[0] = p[ LenReg - 2 ];
+			carryover[1] = p[ LenReg - 1 ];
+        } else {
+			memcpy(&primaryBuffer[ buffer_pos ], (const char*)p, LenReg);
+        }
+		buffer_pos += LenReg;
+#else
+		unsigned int i;
+		for ( i = 0 ; i < LenReg ; i += 4 )
         {
-
             if(SwapChannels == 0)
             {
                 // Left channel
@@ -394,7 +411,9 @@ EXPORT void CALL AiLenChanged( void )
                 primaryBuffer[ buffer_pos + i + 3 ] = p[ i + 3 ];
             }
         }
-        buffer_pos += i;
+		buffer_pos += i;
+#endif
+        
         SDL_UnlockAudio();
     }
     else
@@ -564,6 +583,9 @@ static int resample(unsigned char *input, int input_avail, int oldsamplerate, un
         }
         return j * 4; //number of bytes consumed
     }
+  
+
+if (newsamplerate >= oldsamplerate)
     // newsamplerate < oldsamplerate, this only happens when speed_factor > 1
     for (i = 0; i < output_needed/4; i++)
     {
@@ -576,7 +598,7 @@ static int resample(unsigned char *input, int input_avail, int oldsamplerate, un
 static void my_audio_callback(void *userdata, unsigned char *stream, int len)
 {
     int oldsamplerate, newsamplerate;
-
+	static unsigned int successfullCallbacks = 0;
     if (!l_PluginInit)
         return;
 
@@ -588,7 +610,8 @@ static void my_audio_callback(void *userdata, unsigned char *stream, int len)
 
     if (buffer_pos > (unsigned int) (len * oldsamplerate) / newsamplerate)
     {
-        int input_used;
+	int input_used;
+		
 #if defined(HAS_OSS_SUPPORT)
         if (VolumeControlType == VOLUME_TYPE_OSS)
         {
@@ -598,22 +621,27 @@ static void my_audio_callback(void *userdata, unsigned char *stream, int len)
 #endif
         {
             input_used = resample(primaryBuffer, buffer_pos, oldsamplerate, mixBuffer, len, newsamplerate);
-            memset(stream, 0, len);
+            //memset(stream, 0, len); // not needed
             SDL_MixAudio(stream, mixBuffer, len, VolSDL);
         }
+
+		// TODO circular buffer? shift the buffer sound data along.
         memmove(primaryBuffer, &primaryBuffer[input_used], buffer_pos - input_used);
         buffer_pos -= input_used;
-        DebugMessage(M64MSG_VERBOSE, "%03i my_audio_callback: used %i samples",
+        
+	DebugMessage(M64MSG_VERBOSE, "%03i my_audio_callback: used %i samples",
                      last_callback_ticks % 1000, len / SDL_SAMPLE_BYTES);
+successfullCallbacks++;
     }
     else
     {
         unsigned int SamplesNeeded = (len * oldsamplerate) / (newsamplerate * SDL_SAMPLE_BYTES);
         unsigned int SamplesPresent = buffer_pos / N64_SAMPLE_BYTES;
         underrun_count++;
-        DebugMessage(M64MSG_VERBOSE, "%03i Buffer underflow (%i).  %i samples present, %i needed",
-                     last_callback_ticks % 1000, underrun_count, SamplesPresent, SamplesNeeded);
+        DebugMessage(M64MSG_VERBOSE, "%03i Buffer underflow (%i).  %i samples present, %i needed. %d", // M64MSG_VERBOSE
+                     last_callback_ticks % 1000, underrun_count, SamplesPresent, SamplesNeeded, successfullCallbacks * 2048 + SamplesPresent);
         memset(stream , 0, len);
+		successfullCallbacks =0;
     }
 }
 EXPORT int CALL RomOpen(void)
@@ -668,7 +696,7 @@ static void CreatePrimaryBuffer(void)
 static void InitializeAudio(int freq)
 {
     SDL_AudioSpec *desired, *obtained;
-
+	
     if(SDL_WasInit(SDL_INIT_AUDIO|SDL_INIT_TIMER) == (SDL_INIT_AUDIO|SDL_INIT_TIMER) )
     {
         DebugMessage(M64MSG_VERBOSE, "InitializeAudio(): SDL Audio sub-system already initialized.");

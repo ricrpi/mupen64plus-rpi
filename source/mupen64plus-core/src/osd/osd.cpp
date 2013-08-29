@@ -20,7 +20,7 @@
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 // On-screen Display
-#include <SDL_opengl.h>
+
 #include <SDL_thread.h>
 
 #include "OGLFT.h"
@@ -46,7 +46,7 @@ typedef void (APIENTRYP PTRGLACTIVETEXTURE)(GLenum texture);
 static PTRGLACTIVETEXTURE pglActiveTexture = NULL;
 
 // static variables for OSD
-static int l_OsdInitialized = 0;
+static int l_OsdInitialized = 1;
 
 static LIST_HEAD(l_messageQueue);
 static OGLFT::Monochrome *l_font;
@@ -253,6 +253,7 @@ void osd_init(int width, int height)
     pglActiveTexture = (PTRGLACTIVETEXTURE) VidExt_GL_GetProcAddress("glActiveTexture");
     if (pglActiveTexture == NULL)
     {
+		l_OsdInitialized = 0;
         DebugMessage(M64MSG_WARNING, "OpenGL function glActiveTexture() not supported.  OSD deactivated.");
         return;
     }
