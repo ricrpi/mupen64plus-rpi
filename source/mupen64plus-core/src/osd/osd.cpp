@@ -46,7 +46,7 @@ typedef void (APIENTRYP PTRGLACTIVETEXTURE)(GLenum texture);
 static PTRGLACTIVETEXTURE pglActiveTexture = NULL;
 
 // static variables for OSD
-static int l_OsdInitialized = 1;
+static int l_OsdInitialized = 0;
 
 static LIST_HEAD(l_messageQueue);
 static OGLFT::Monochrome *l_font;

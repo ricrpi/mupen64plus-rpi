@@ -22,7 +22,8 @@
 #if !defined(OSAL_OPENGL_H)
 #define OSAL_OPENGL_H
 
-#include <SDL_config.h>
+//#include <SDL_config.h>
+extern "C" { extern int SDL_GetTicks(void); }
 
 #if SDL_VIDEO_OPENGL
 #include <SDL_opengl.h>

@@ -25,6 +25,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #if SDL_VIDEO_OPENGL
 #include "OGLExtensions.h"
 #endif
+
+#include <GLES2/gl2.h>
+
 #include "OGLDebug.h"
 #include "OGLGraphicsContext.h"
 #include "TextureManager.h"
@@ -319,7 +322,8 @@ void COGLGraphicsContext::InitOGLExtension(void)
     // Compute maxAnisotropicFiltering
     m_maxAnisotropicFiltering = 0;
 
-    if( m_bSupportAnisotropicFiltering
+//TODO
+   /* if( m_bSupportAnisotropicFiltering
     && (options.anisotropicFiltering == 2
         || options.anisotropicFiltering == 4
         || options.anisotropicFiltering == 8
@@ -338,8 +342,8 @@ void COGLGraphicsContext::InitOGLExtension(void)
         //check if user want less anisotropy than hardware can do
         if((uint32) m_maxAnisotropicFiltering > options.anisotropicFiltering)
         m_maxAnisotropicFiltering = options.anisotropicFiltering;
-    }
-
+    }*/ 
+/*
     // Nvidia only extension features (optional)
     m_bSupportNVRegisterCombiner = IsExtensionSupported("GL_NV_register_combiners");
     m_bSupportTextureMirrorRepeat = IsExtensionSupported("GL_IBM_texture_mirrored_repeat") || IsExtensionSupported("ARB_texture_mirrored_repeat");
@@ -347,7 +351,7 @@ void COGLGraphicsContext::InitOGLExtension(void)
     m_bSupportTextureLOD = IsExtensionSupported("GL_EXT_texture_lod");
     m_bSupportBlendColor = IsExtensionSupported("GL_EXT_blend_color");
     m_bSupportBlendSubtract = IsExtensionSupported("GL_EXT_blend_subtract");
-    m_bSupportNVTextureEnvCombine4 = IsExtensionSupported("GL_NV_texture_env_combine4");
+    m_bSupportNVTextureEnvCombine4 = IsExtensionSupported("GL_NV_texture_env_combine4");*/
 
 }
 
@@ -407,6 +411,7 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
     status.gFrameCount++;
 
     glFlush();
+	//glFinish();
     OPENGL_CHECK_ERRORS;
     //glFinish();
     //wglSwapIntervalEXT(0);

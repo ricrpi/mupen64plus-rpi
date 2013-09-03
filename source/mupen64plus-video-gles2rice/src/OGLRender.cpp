@@ -18,21 +18,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "osal_opengl.h"
 
-#if SDL_VIDEO_OPENGL
-#include "OGLExtensions.h"
-#elif SDL_VIDEO_OPENGL_ES2
+
 #include "OGLES2FragmentShaders.h"
-#endif
 #include "OGLDebug.h"
 #include "OGLRender.h"
 #include "OGLGraphicsContext.h"
 #include "OGLTexture.h"
 #include "TextureManager.h"
-
-#ifdef PAULSCODE
-#include "ae_bridge.h"
-static int hardwareType = HARDWARE_TYPE_UNKNOWN;
-#endif
 
 // FIXME: Use OGL internal L/T and matrix stack
 // FIXME: Use OGL lookupAt function

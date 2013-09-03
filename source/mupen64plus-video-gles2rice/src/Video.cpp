@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "osal_opengl.h"
 
+
 #define M64P_PLUGIN_PROTOTYPES 1
 #include "m64p_types.h"
 #include "m64p_common.h"
@@ -176,11 +177,12 @@ static void UpdateScreenStep2 (void)
     
     g_pFrameBufferManager->SetAddrBeDisplayed(*g_GraphicsInfo.VI_ORIGIN_REG);
 
-    if( status.gDlistCount == 0 )
+	if( status.gDlistCount == 0 )
     {
-        // CPU frame buffer update
-        uint32 width = *g_GraphicsInfo.VI_WIDTH_REG;
-        if( (*g_GraphicsInfo.VI_ORIGIN_REG & (g_dwRamSize-1) ) > width*2 && *g_GraphicsInfo.VI_H_START_REG != 0 && width != 0 )
+		uint32 width = *g_GraphicsInfo.VI_WIDTH_REG;
+		// CPU frame buffer update
+        
+        if( ((*g_GraphicsInfo.VI_ORIGIN_REG & (g_dwRamSize-1) ) > width*2) && (*g_GraphicsInfo.VI_H_START_REG != 0) && (width != 0) )
         {
             SetVIScales();
             CRender::GetRender()->DrawFrameBuffer(true);
@@ -233,7 +235,6 @@ static void UpdateScreenStep2 (void)
                 status.curDisplayBuffer = *g_GraphicsInfo.VI_ORIGIN_REG;
                 status.curVIOriginReg = status.curDisplayBuffer;
                 //status.curRenderBuffer = NULL;
-
                 CGraphicsContext::Get()->UpdateFrame();
                 DEBUGGER_IF_DUMP( pauseAtNext, TRACE1("Update Screen: VIORIG=%08X", *g_GraphicsInfo.VI_ORIGIN_REG));
                 DEBUGGER_PAUSE_COUNT_N_WITHOUT_UPDATE(NEXT_FRAME);
@@ -768,7 +769,8 @@ EXPORT void CALL UpdateScreen(void)
         {
             char caption[200];
             sprintf(caption, "%s v%i.%i.%i - %.3f VI/S", PLUGIN_NAME, VERSION_PRINTF_SPLIT(PLUGIN_VERSION), frames/5.0);
-            CoreVideo_SetCaption(caption);
+            DebugMessage(M64MSG_INFO, "%s", caption);
+	CoreVideo_SetCaption(caption);
             frames = 0;
             lastTick = nowTick;
         }
@@ -973,7 +975,7 @@ EXPORT void CALL ReadScreen2(void *dest, int *width, int *height, int bFront)
     if (dest == NULL)
         return;
 
-//#if SDL_VIDEO_OPENGL
+#if SDL_VIDEO_OPENGL
     GLint oldMode;
     glGetIntegerv( GL_READ_BUFFER, &oldMode );
     if (bFront)
@@ -984,7 +986,10 @@ EXPORT void CALL ReadScreen2(void *dest, int *width, int *height, int bFront)
                  GL_RGBA, GL_UNSIGNED_BYTE, dest );
 
     glReadBuffer( oldMode );
-//#endif
+#else
+	glReadPixels( 0, 0, windowSetting.uDisplayWidth, windowSetting.uDisplayHeight,
+                 GL_RGBA, GL_UNSIGNED_BYTE, dest );
+#endif
 }
     
 

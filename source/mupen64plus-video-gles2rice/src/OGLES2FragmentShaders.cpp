@@ -293,7 +293,7 @@ bool COGL_FragmentProgramCombiner::Initialize(void)
     if( !COGLColorCombiner4::Initialize() )
         return false;
 
-    COGLGraphicsContext *pcontext = (COGLGraphicsContext *)(CGraphicsContext::g_pGraphicsContext);
+//    COGLGraphicsContext *pcontext = (COGLGraphicsContext *)(CGraphicsContext::g_pGraphicsContext);
 //    if( pcontext->IsExtensionSupported("GL_fragment_program") )
 //    {
         m_bFragmentProgramIsSupported = true;

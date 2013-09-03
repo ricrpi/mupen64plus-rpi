@@ -625,7 +625,7 @@ static void my_audio_callback(void *userdata, unsigned char *stream, int len)
             SDL_MixAudio(stream, mixBuffer, len, VolSDL);
         }
 
-		// TODO circular buffer? shift the buffer sound data along.
+		//  shift the buffer sound data along. TODO circular buffer?
         memmove(primaryBuffer, &primaryBuffer[input_used], buffer_pos - input_used);
         buffer_pos -= input_used;
         

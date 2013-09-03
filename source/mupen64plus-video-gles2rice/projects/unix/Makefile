@@ -122,8 +122,8 @@ endif
 # base CFLAGS, LDLIBS, and LDFLAGS
 OPTFLAGS ?= -flto #-O3
 WARNFLAGS ?= -Wall
-CFLAGS += $(OPTFLAGS) $(WARNFLAGS) -ffast-math -fno-strict-aliasing -fvisibility=hidden -I../../src -DSDL_VIDEO_OPENGL_ES2=1
-CXXFLAGS += -fvisibility-inlines-hidden -DSDL_VIDEO_OPENGL_ES2=1
+CFLAGS += $(OPTFLAGS) $(WARNFLAGS) -ffast-math -fno-strict-aliasing -fvisibility=hidden -I../../src -DSDL_VIDEO_OPENGL_ES2=1 -DSDL_VIDEO_OPENGL=0
+CXXFLAGS += -fvisibility-inlines-hidden -DSDL_VIDEO_OPENGL_ES2=1 -DSDL_VIDEO_OPENGL=0
 LDFLAGS += $(SHARED)
 
 
@@ -281,6 +281,7 @@ LINK.o = $(Q_LD)$(CXX) $(CXXFLAGS) $(LDFLAGS) $(TARGET_ARCH)
 # set special flags for given Makefile parameters
 ifeq ($(DEBUG),1)
   #CFLAGS += -g
+CFLAGS += -DOPENGL_DEBUG
   INSTALL_STRIP_FLAG ?= 
 else
   CFLAGS += -O3
@@ -336,7 +337,7 @@ SOURCE = \
 	$(SRCDIR)/OGLExtCombiner.cpp \
 	$(SRCDIR)/OGLExtensions.cpp \
 	$(SRCDIR)/OGLExtRender.cpp \
-	$(SRCDIR)/OGLFragmentShaders.cpp \
+	$(SRCDIR)/OGLES2FragmentShaders.cpp \
 	$(SRCDIR)/OGLGraphicsContext.cpp \
 	$(SRCDIR)/OGLRender.cpp \
 	$(SRCDIR)/OGLRenderExt.cpp \
@@ -355,6 +356,7 @@ SOURCE = \
 	$(SRCDIR)/TextureManager.cpp \
 	$(SRCDIR)/VectorMath.cpp \
 	$(SRCDIR)/Video.cpp
+	
 
 ifeq ($(OS),MINGW)
 SOURCE += \
@@ -432,6 +434,6 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	$(COMPILE.cc) -o $@ $<
 
 $(TARGET): $(OBJECTS)
-	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
+	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@ 
 
 .PHONY: all clean install uninstall targets
