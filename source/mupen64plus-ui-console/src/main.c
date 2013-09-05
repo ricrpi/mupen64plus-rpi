@@ -463,7 +463,7 @@ static m64p_error ParseCommandLineFinal(int argc, const char **argv)
             int xres, yres;
             i++;
             if (sscanf(res, "%ix%i", &xres, &yres) != 2)
-                DebugMessage(M64MSG_WARNING, __FILE__ ":" __LINE__ " couldn't parse resolution '%s'", res);
+                DebugMessage(M64MSG_WARNING, "%s:%d couldn't parse resolution '%s'", __FILE__, __LINE__, res);
             else
             {
                 (*ConfigSetParameter)(l_ConfigVideo, "ScreenWidth", M64TYPE_INT, &xres);
