@@ -642,7 +642,8 @@ static void video_plugin_render_callback(int bScreenRedrawn)
     {
         // if the OSD is enabled, and the screen has not been recently redrawn, then we cannot take a screenshot now because
         // it contains the OSD text.  Wait until the next redraw
-        if (!bOSD || bScreenRedrawn)
+//        if (!bOSD || bScreenRedrawn)
+		if (bScreenRedrawn)
         {
             TakeScreenshot(l_TakeScreenshot - 1);  // current frame number +1 is in l_TakeScreenshot
             l_TakeScreenshot = 0; // reset flag
