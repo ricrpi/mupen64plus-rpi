@@ -38,7 +38,6 @@
 #include "vidext_sdl2_compat.h"
 #endif
 
-#include "bcm_host.h"
 #include <GLES2/gl2.h>
 #include <EGL/egl.h>
 #include <EGL/eglplatform.h>
@@ -106,8 +105,6 @@ EXPORT m64p_error CALL VidExt_Init(void)
     /* call video extension override if necessary */
     if (l_VideoExtensionActive)
         return (*l_ExternalVideoFuncTable.VidExtFuncInit)();
-
-    bcm_host_init();
 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE);
 

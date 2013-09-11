@@ -28,14 +28,28 @@
 
 #include "api/callbacks.h"
 
+
+#define RPI_NO_X 1
+
+#ifdef RPI_NO_X
 #include  "bcm_host.h"
+#else
+#include  <X11/Xlib.h>
+#include  <X11/Xatom.h>
+#include  <X11/Xutil.h>
+#endif
+
+#ifndef RPI_NO_X
+// X11 related local variables
+static Display *x_display = NULL;
+#endif
 
 ///
 // CreateEGLContext()
 //
 //    Creates an EGL rendering context and all associated elements
 //
-EGLBoolean CreateEGLContext ( EGLNativeWindowType hWnd, EGLDisplay* eglDisplay,
+static EGLBoolean CreateEGLContext ( EGLNativeWindowType hWnd, EGLDisplay* eglDisplay,
                               EGLContext* eglContext, EGLSurface* eglSurface,
                               EGLint attribList[])
 {
@@ -46,14 +60,29 @@ EGLBoolean CreateEGLContext ( EGLNativeWindowType hWnd, EGLDisplay* eglDisplay,
    EGLContext context;
    EGLSurface surface;
    EGLConfig config;
-   EGLint contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };	// Want to use GLES2 in the EGL Context
-      
+
+   #ifndef RPI_NO_X
+   EGLint contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE, EGL_NONE };
+   #else
+   EGLint contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+   #endif
+
    // Get Display
+   #ifndef RPI_NO_X
    display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
    if ( display == EGL_NO_DISPLAY )
    {
+	DebugMessage(M64MSG_ERROR, "Could not Get Display");
       return M64ERR_SYSTEM_FAIL;
    }
+   #else
+   display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+   if ( display == EGL_NO_DISPLAY )
+   {
+	DebugMessage(M64MSG_ERROR, "Could not Get Display");
+      return M64ERR_SYSTEM_FAIL;
+   }
+   #endif
    
    // Initialize EGL
    if ( !eglInitialize(display, &majorVersion, &minorVersion) )
@@ -78,7 +107,10 @@ EGLBoolean CreateEGLContext ( EGLNativeWindowType hWnd, EGLDisplay* eglDisplay,
    }
 
    // Create a surface
-   surface = eglCreateWindowSurface(display, config, (EGLNativeWindowType)hWnd, NULL);
+   surface = eglCreateWindowSurface(display, config, 
+//(EGLNativeWindowType)display, 
+ (EGLNativeWindowType)hWnd,
+ NULL);
    if ( surface == EGL_NO_SURFACE )
    {
 	DebugMessage(M64MSG_ERROR, "Could not Create EGL Surface");
@@ -107,6 +139,7 @@ EGLBoolean CreateEGLContext ( EGLNativeWindowType hWnd, EGLDisplay* eglDisplay,
    return M64ERR_SUCCESS;
 } 
 
+#ifdef RPI_NO_X
 ///
 //  WinCreate() - RaspberryPi, direct surface (No X, Xlib)
 //
@@ -124,6 +157,11 @@ EGLBoolean WinCreate(ESContext *esContext, const char *title)
    VC_RECT_T dst_rect;
    VC_RECT_T src_rect;
    
+	VC_DISPMANX_ALPHA_T dispman_alpha = {
+		DISPMANX_FLAGS_ALPHA_FIXED_ALL_PIXELS,
+		255, /* opacity 0-255 */
+		0 /* mask resource handle */
+	};
 
    uint32_t display_width;
    uint32_t display_height;
@@ -139,8 +177,7 @@ EGLBoolean WinCreate(ESContext *esContext, const char *title)
    
     display_width = esContext->width;
    display_height = esContext->height;
-	//display_width=640;
-	//display_height=480;
+
    dst_rect.x = 0;
    dst_rect.y = 0;
    dst_rect.width = display_width;
@@ -153,11 +190,9 @@ EGLBoolean WinCreate(ESContext *esContext, const char *title)
 
    dispman_display = vc_dispmanx_display_open( 0 /* LCD */);
    dispman_update = vc_dispmanx_update_start( 0 );
-         
    dispman_element = vc_dispmanx_element_add ( dispman_update, dispman_display,
       0/*layer*/, &dst_rect, 0/*src*/,
-      &src_rect, DISPMANX_PROTECTION_NONE, 0 /*alpha*/, 0/*clamp*/, 0/*transform*/);
-      
+      &src_rect, DISPMANX_PROTECTION_NONE, &dispman_alpha, 0/*clamp*/, 0/*transform*/);
    nativewindow.element = dispman_element;
    nativewindow.width = display_width;
    nativewindow.height = display_height;
@@ -168,6 +203,124 @@ EGLBoolean WinCreate(ESContext *esContext, const char *title)
 
 	return M64ERR_SUCCESS;
 }
+///
+//  userInterrupt()
+//
+//      Reads from X11 event loop and interrupt program if there is a keypress, or
+//      window close action.
+//
+GLboolean userInterrupt(ESContext *esContext)
+{
+	//GLboolean userinterrupt = GL_FALSE;
+    //return userinterrupt;
+    
+    // Ctrl-C for now to stop
+    
+    return GL_FALSE;
+}
+#else
+///
+//  WinCreate()
+//
+//      This function initialized the native X11 display and window for EGL
+//
+EGLBoolean WinCreate(ESContext *esContext, const char *title)
+{
+    Window root;
+    XSetWindowAttributes swa;
+    XSetWindowAttributes  xattr;
+    Atom wm_state;
+    XWMHints hints;
+    XEvent xev;
+    EGLConfig ecfg;
+    EGLint num_config;
+    Window win;
+
+    /*
+     * X11 native display initialization
+     */
+
+    x_display = XOpenDisplay(NULL);
+    if ( x_display == NULL )
+    {
+        return M64ERR_SYSTEM_FAIL;
+    }
+
+    root = DefaultRootWindow(x_display);
+
+    swa.event_mask  =  ExposureMask | PointerMotionMask | KeyPressMask;
+    win = XCreateWindow(
+               x_display, root,
+               0, 0, esContext->width, esContext->height, 0,
+               CopyFromParent, InputOutput,
+               CopyFromParent, CWEventMask,
+               &swa );
+
+    xattr.override_redirect = FALSE;
+    XChangeWindowAttributes ( x_display, win, CWOverrideRedirect, &xattr );
+
+    hints.input = TRUE;
+    hints.flags = InputHint;
+    XSetWMHints(x_display, win, &hints);
+
+    // make the window visible on the screen
+    XMapWindow (x_display, win);
+    XStoreName (x_display, win, title);
+
+    // get identifiers for the provided atom name strings
+    wm_state = XInternAtom (x_display, "_NET_WM_STATE", FALSE);
+
+    memset ( &xev, 0, sizeof(xev) );
+    xev.type                 = ClientMessage;
+    xev.xclient.window       = win;
+    xev.xclient.message_type = wm_state;
+    xev.xclient.format       = 32;
+    xev.xclient.data.l[0]    = 1;
+    xev.xclient.data.l[1]    = FALSE;
+    XSendEvent (
+       x_display,
+       DefaultRootWindow ( x_display ),
+       FALSE,
+       SubstructureNotifyMask,
+       &xev );
+
+    esContext->hWnd = (EGLNativeWindowType) win;
+    return M64ERR_SUCCESS;
+}
+
+
+///
+//  userInterrupt()
+//
+//      Reads from X11 event loop and interrupt program if there is a keypress, or
+//      window close action.
+//
+GLboolean userInterrupt(ESContext *esContext)
+{
+    XEvent xev;
+    KeySym key;
+    GLboolean userinterrupt = GL_FALSE;
+    char text;
+
+    // Pump all messages from X server. Keypresses are directed to keyfunc (if defined)
+    while ( XPending ( x_display ) )
+    {
+        XNextEvent( x_display, &xev );
+        if ( xev.type == KeyPress )
+        {
+            if (XLookupString(&xev.xkey,&text,1,&key,0)==1)
+            {
+DebugMessage(M64MSG_INFO, "Key press: %c",text );
+                if (esContext->keyFunc != NULL)
+                    esContext->keyFunc(esContext, text, 0, 0);
+            }
+        }
+        if ( xev.type == DestroyNotify )
+            userinterrupt = GL_TRUE;
+    }
+    return userinterrupt;
+}
+#endif
 
 //////////////////////////////////////////////////////////////////
 //
@@ -183,9 +336,10 @@ EGLBoolean WinCreate(ESContext *esContext, const char *title)
 //
 m64p_error esInitContext ( ESContext *esContext )
 {
+   #ifdef RPI_NO_X
    bcm_host_init();
-
-  if ( esContext != NULL )
+#endif
+   if ( esContext != NULL )
    {
       memset( esContext, 0, sizeof( ESContext) );
    }
@@ -210,17 +364,20 @@ m64p_error esCreateWindow ( ESContext *esContext, const char* title, GLint width
    EGLint attribList[] =
    {
        EGL_RED_SIZE,       5,
-       EGL_GREEN_SIZE,     6,
+       EGL_GREEN_SIZE,     6, //6,
        EGL_BLUE_SIZE,      5,
-       EGL_ALPHA_SIZE,     (flags & ES_WINDOW_ALPHA) ? 8 : EGL_DONT_CARE,
-       EGL_DEPTH_SIZE,     (flags & ES_WINDOW_DEPTH) ? 8 : EGL_DONT_CARE,
-       EGL_STENCIL_SIZE,   (flags & ES_WINDOW_STENCIL) ? 8 : EGL_DONT_CARE,
-       EGL_SAMPLE_BUFFERS, (flags & ES_WINDOW_MULTISAMPLE) ? 1 : 0,
+       EGL_ALPHA_SIZE,     EGL_DONT_CARE,
+       EGL_DEPTH_SIZE,     EGL_DONT_CARE,
+       EGL_STENCIL_SIZE,   EGL_DONT_CARE,
+EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+	   //EGL_BIND_TO_TEXTURE_RGBA, EGL_TRUE, 
+
+      //EGL_SAMPLE_BUFFERS, 0,
        EGL_NONE
    };
    
    if ( esContext == NULL )
-   {
+   {	DebugMessage(M64MSG_ERROR, "esContext = NULL");
       return M64ERR_SYSTEM_FAIL;
    }
 
@@ -244,7 +401,8 @@ m64p_error esCreateWindow ( ESContext *esContext, const char* title, GLint width
       DebugMessage(M64MSG_ERROR, "Failed to create EGL Context");
       return M64ERR_SYSTEM_FAIL;
    }
-   
+
+	//glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
    return M64ERR_SUCCESS;
 }
