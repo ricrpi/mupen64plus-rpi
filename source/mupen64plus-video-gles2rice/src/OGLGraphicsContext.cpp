@@ -410,7 +410,7 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
 {
     status.gFrameCount++;
 
-    glFlush();
+    //glFlush();
 	//glFinish();
     OPENGL_CHECK_ERRORS;
     //glFinish();
@@ -465,7 +465,7 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
    if(renderCallback)
        (*renderCallback)(status.bScreenIsDrawn);
 
-   CoreVideo_GL_SwapBuffers();
+   if (status.bScreenIsDrawn) CoreVideo_GL_SwapBuffers();
    
    /*if(options.bShowFPS)
      {
@@ -482,8 +482,8 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
          lastTick = nowTick;
       }
      }*/
-
-    glDepthMask(GL_TRUE);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    //glDepthMask(GL_TRUE);
     OPENGL_CHECK_ERRORS;
     glClearDepth(1.0f);
     OPENGL_CHECK_ERRORS;

@@ -102,9 +102,14 @@ uint16 ConvertRGBATo555(uint8 r, uint8 g, uint8 b, uint8 a)
     return ((r>>3)<<RGBA5551_RedShift) | ((g>>3)<<RGBA5551_GreenShift) | ((b>>3)<<RGBA5551_BlueShift) | ar;//(a>>7);
 }
 
+uint16 ConvertBGRATo555(uint32 color32)
+{
+    return (uint16)((((color32>>3)&0x1F)<<RGBA5551_RedShift) | (((color32>>11)&0x1F)<<RGBA5551_GreenShift) | (((color32>>19)&0x1F)<<RGBA5551_BlueShift) | ((color32>>31)));
+}
+
 uint16 ConvertRGBATo555(uint32 color32)
 {
-    return (uint16)((((color32>>19)&0x1F)<<RGBA5551_RedShift) | (((color32>>11)&0x1F)<<RGBA5551_GreenShift) | (((color32>>3)&0x1F)<<RGBA5551_BlueShift) | ((color32>>31)));;
+    return (uint16)((((color32>>19)&0x1F)<<RGBA5551_RedShift) | (((color32>>11)&0x1F)<<RGBA5551_GreenShift) | (((color32>>3)&0x1F)<<RGBA5551_BlueShift) | ((color32>>31)));
 }
 
 void FrameBufferManager::UpdateRecentCIAddr(SetImgInfo &ciinfo)
@@ -1914,13 +1919,14 @@ void FrameBufferManager::CopyBufferToRDRAM(uint32 addr, uint32 fmt, uint32 siz, 
                 for( uint32 j=0; j<width; j++ )
                 {
                     // Point
-                    uint8 r = pS0[indexes[j]+2];
+                    /*uint8 r = pS0[indexes[j]+2];
                     uint8 g = pS0[indexes[j]+1];
                     uint8 b = pS0[indexes[j]+0];
                     uint8 a = pS0[indexes[j]+3];
 
                     // Liner
-                    *(pD+(j^1)) = ConvertRGBATo555( r, g, b, a);
+                    *(pD+(j^1)) = ConvertRGBATo555( r, g, b, a);*/
+					*(pD+(j^1)) = ConvertBGRATo555( (uint32)pS0[indexes[j]] );
                 }
             }
         }
@@ -1945,12 +1951,14 @@ void FrameBufferManager::CopyBufferToRDRAM(uint32 addr, uint32 fmt, uint32 siz, 
                 for( uint32 j=0; j<width; j++ )
                 {
                     int pos = 4*(j*bufWidth/width);
-                    tempword = ConvertRGBATo555((pS[pos+2]),        // Red
+                    /*tempword = ConvertRGBATo555((pS[pos+2]),        // Red
                                                 (pS[pos+1]),        // Green
                                                 (pS[pos+0]),        // Blue
-                                                (pS[pos+3]));       // Alpha
+                                                (pS[pos+3]));       // Alpha*/
                     
-                    //*pD = CIFindIndex(tempword);
+					tempword = ConvertBGRATo555((uint32)pS[pos]);
+                    
+					//*pD = CIFindIndex(tempword);
                     *(pD+(j^3)) = RevTlutTable[tempword];
                 }
             }

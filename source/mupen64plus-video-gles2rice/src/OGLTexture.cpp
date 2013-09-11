@@ -124,6 +124,8 @@ void COGLTexture::EndUpdate(DrawInfo *di)
         // Tell to hardware to generate mipmap (himself) when glTexImage2D is called
         glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
 #elif SDL_VIDEO_OPENGL_ES2
+		//TODO test if this increases performance
+		//glHint(GL_FASTEST, GL_GENERATE_MIPMAP_HINT);
         glGenerateMipmap(GL_TEXTURE_2D);
 #endif
         OPENGL_CHECK_ERRORS;

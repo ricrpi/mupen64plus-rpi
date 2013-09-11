@@ -795,7 +795,6 @@ void DLParser_Process(OSTask * pTask)
         return;
     }
 
-    status.bScreenIsDrawn = true;
     if( options.bSkipFrame )
     {
         skipframe++;
@@ -807,6 +806,8 @@ void DLParser_Process(OSTask * pTask)
         }
     }
 
+	status.bScreenIsDrawn = true;
+    
     if( currentRomOptions.N64RenderToTextureEmuType != TXT_BUF_NONE && defaultRomOptions.bSaveVRAM )
     {
         g_pFrameBufferManager->CheckRenderTextureCRCInRDRAM();
