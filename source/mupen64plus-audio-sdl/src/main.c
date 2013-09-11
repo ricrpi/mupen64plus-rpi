@@ -553,7 +553,7 @@ static void my_audio_callback(void *userdata, unsigned char *stream, int len)
 	else
 	{
 		underrun_count++;
-		DebugMessage(M64MSG_VERBOSE, "%03i Buffer underflow (%i).  %i samples present, %i needed", // M64MSG_VERBOSE
+		DebugMessage(M64MSG_WARNING, "%03i Buffer underflow (%i).  %i samples present, %i needed", // M64MSG_VERBOSE
 				last_callback_ticks % 1000, underrun_count, uiBufferSize/SDL_SAMPLE_BYTES, (len - uiBufferSize)/SDL_SAMPLE_BYTES
 //, successfullCallbacks * 2048 + uiBufferSize/SDL_SAMPLE_BYTES
 );
