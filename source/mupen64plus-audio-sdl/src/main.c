@@ -43,7 +43,7 @@
    This is the buffer where audio is loaded after it's extracted from n64's memory.
    This value must be larger than PRIMARY_BUFFER_TARGET */
 #define PRIMARY_BUFFER_MULTIPLE 10
-
+#define PRIMARY_BUFFER_MULTIPLE_MAX 1000
 /* this is the buffer fullness level (in equivalent output samples) which is targeted
    for the primary audio buffer (by inserting delays) each time data is received from
    the running N64 program.  This value must be larger than the SECONDARY_BUFFER_SIZE.
@@ -373,14 +373,22 @@ EXPORT void CALL AiLenChanged( void )
 
 	DebugMessage(M64MSG_VERBOSE, "AiLenChanged() buffer = %d to %d (%d), LenReg = %d, +bytes? = %d", uiBufferStart, uiBufferEnd, uiBufferSize, LenReg, AudioBytes );
 
-	// Are we not going to overflow?
+	// Are we going to overflow the buffer?
 	if ( (uiBufferSize + (LenReg * newsamplerate) / oldsamplerate) > uiBufferMultiple * uiSecondaryBufferSize * SDL_SAMPLE_BYTES)
 	{
 		unsigned int ExtraSpace = (LenReg / uiSecondaryBufferSize);
-
-		uiBufferMultiple += ExtraSpace;
-		CreatePrimaryBuffer();
-		DebugMessage(M64MSG_WARNING, "AiLenChanged(): Audio buffer to small. Increased PRIMARY_BUFFER_MULTIPLE to %d", uiBufferMultiple);
+		
+		if (uiBufferMultiple > PRIMARY_BUFFER_MULTIPLE_MAX )
+		{
+			critical_failure = 1;
+			DebugMessage(M64MSG_ERROR, "AiLenChanged(): Audio buffer PRIMARY_BUFFER_MULTIPLE already set to %d. Critical Failure", PRIMARY_BUFFER_MULTIPLE_MAX);
+		}
+		else
+		{
+			uiBufferMultiple += ExtraSpace;
+			CreatePrimaryBuffer();
+			DebugMessage(M64MSG_WARNING, "AiLenChanged(): Audio buffer to small. Increased PRIMARY_BUFFER_MULTIPLE to %d", uiBufferMultiple);
+		}
 	}
 	
 	SDL_LockAudio();
@@ -634,6 +642,8 @@ static void InitializeAudio(int freq)
 		DebugMessage(M64MSG_VERBOSE, "Secondary buffer: %i output samples.", uiSecondaryBufferSize);
 		InitializeSDL();
 	}
+
+	if (OutputFreq < 4000) return;
 	if (critical_failure == 1) return;
 	GameFreq = freq; // This is important for the sync
 
@@ -647,7 +657,7 @@ static void InitializeAudio(int freq)
 	obtained = malloc(sizeof(SDL_AudioSpec));
 
 	uiOutputFrequencyMode = ConfigGetParamInt(l_ConfigAudio, "DEFAULT_MODE");
-DebugMessage(M64MSG_VERBOSE, "Output frequency Mode : %i.", uiOutputFrequencyMode);
+	DebugMessage(M64MSG_VERBOSE, "Output frequency Mode : %i.", uiOutputFrequencyMode);
 	switch (uiOutputFrequencyMode)
 	{
 		case 0:
@@ -669,6 +679,7 @@ DebugMessage(M64MSG_VERBOSE, "Output frequency Mode : %i.", uiOutputFrequencyMod
 			}	
 			break;
 	}
+ 
 	desired->freq = OutputFreq;
 
 	DebugMessage(M64MSG_VERBOSE, "Requesting frequency: %iHz.", desired->freq);
@@ -714,16 +725,16 @@ DebugMessage(M64MSG_VERBOSE, "Output frequency Mode : %i.", uiOutputFrequencyMod
 	uiSecondaryBufferSize = hardware_spec->samples;
 
 	if (uiBufferMultiple < 5) uiBufferMultiple = 5;
-	if (uiBufferMultiple > 10000)
+	if (uiBufferMultiple > PRIMARY_BUFFER_MULTIPLE_MAX)
 	{ 
-		DebugMessage(M64MSG_VERBOSE, "Limiting PRIMARY_BUFFER_MULTIPLE to 10000");
-		uiBufferMultiple = 10000;
+		DebugMessage(M64MSG_VERBOSE, "Limiting PRIMARY_BUFFER_MULTIPLE to %d", PRIMARY_BUFFER_MULTIPLE_MAX);
+		uiBufferMultiple = PRIMARY_BUFFER_MULTIPLE_MAX;
 	}
 	
 	if (uiBufferTargetMultiple < uiBufferMultiple) uiBufferTargetMultiple = uiBufferMultiple + 2;
 	if (uiBufferTargetMultiple > 9000)
 	{ 
-		DebugMessage(M64MSG_VERBOSE, "Limiting PRIMARY_BUFFER_TARGET to 1500");
+		DebugMessage(M64MSG_VERBOSE, "Limiting PRIMARY_BUFFER_TARGET to 9000");
 		uiBufferTargetMultiple = 9000;
 	}
 
