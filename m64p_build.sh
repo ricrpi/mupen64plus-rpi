@@ -27,10 +27,7 @@ if [ -z "$MAKE" ]; then
 	MAKE=make
 fi
 if [ -z "$M64P_COMPONENTS" ]; then
-	M64P_COMPONENTS="core video-gles2rice audio-sdl" # rom ui-console input-sdl rsp-hle"
-	#M64P_COMPONENTS="video-gles2rice"
-	#M64P_COMPONENTS="audio-sdl"
-	#M64P_COMPONENTS="core"
+	M64P_COMPONENTS="core rom ui-console audio-sdl input-sdl rsp-hle video-gles2rice " # video-glide64mk2"
 fi
 
 mkdir -p ./test/
@@ -51,7 +48,7 @@ for component in ${M64P_COMPONENTS}; do
 	fi
 
 	echo "************************************ Building ${component} ${component_type}"
-	#"$MAKE" -C source/mupen64plus-${component}/projects/unix clean $@
+	"$MAKE" -C source/mupen64plus-${component}/projects/unix clean $@
 	"$MAKE" -C source/mupen64plus-${component}/projects/unix all $@
 	"$MAKE" -C source/mupen64plus-${component}/projects/unix install $@ ${MAKE_INSTALL} DESTDIR="$(pwd)/test/"
 
