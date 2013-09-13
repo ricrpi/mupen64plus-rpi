@@ -273,11 +273,11 @@ void COGLGraphicsContext::InitState(void)
     glDisable(GL_NORMALIZE);
     OPENGL_CHECK_ERRORS;
 #endif
-
+	glEnable(GL_DEPTH_TEST);
+    OPENGL_CHECK_ERRORS;
     glDepthFunc(GL_LEQUAL);
     OPENGL_CHECK_ERRORS;
-    glEnable(GL_DEPTH_TEST);
-    OPENGL_CHECK_ERRORS;
+    
 
 #if SDL_VIDEO_OPENGL
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
@@ -298,7 +298,8 @@ void COGLGraphicsContext::InitState(void)
     glDepthRange(-1, 1);
 
 #elif SDL_VIDEO_OPENGL_ES2
-    glDepthRangef(0.0f, 1.0f);
+glDepthRangef(0.0f, 1.0f); //RJH test
+    //glDepthRangef(0.0f, 1.0f);
 #endif
     OPENGL_CHECK_ERRORS;
 }
@@ -410,7 +411,7 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
 {
     status.gFrameCount++;
 
-    //glFlush();
+    glFlush();
 	//glFinish();
     OPENGL_CHECK_ERRORS;
     //glFinish();
@@ -482,15 +483,20 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
          lastTick = nowTick;
       }
      }*/
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-    //glDepthMask(GL_TRUE);
+    
+	glDepthMask(GL_TRUE);
     OPENGL_CHECK_ERRORS;
+
     glClearDepth(1.0f);
+	OPENGL_CHECK_ERRORS;	
+	
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     OPENGL_CHECK_ERRORS;
-    if( !g_curRomInfo.bForceScreenClear )
+    
+	if( !g_curRomInfo.bForceScreenClear )
     {
-        glClear(GL_DEPTH_BUFFER_BIT);
-        OPENGL_CHECK_ERRORS;
+        //glClear(GL_DEPTH_BUFFER_BIT);
+        //OPENGL_CHECK_ERRORS;
     }
     else
         needCleanScene = true;

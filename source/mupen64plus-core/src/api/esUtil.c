@@ -363,16 +363,16 @@ m64p_error esCreateWindow ( ESContext *esContext, const char* title, GLint width
 {
    EGLint attribList[] =
    {
-       EGL_RED_SIZE,       5,
-       EGL_GREEN_SIZE,     6, //6,
-       EGL_BLUE_SIZE,      5,
-       EGL_ALPHA_SIZE,     EGL_DONT_CARE,
-       EGL_DEPTH_SIZE,     EGL_DONT_CARE,
+       EGL_RED_SIZE,       8,
+       EGL_GREEN_SIZE,     8, //6,
+       EGL_BLUE_SIZE,      8,
+       EGL_ALPHA_SIZE,     8, //EGL_DONT_CARE,
+       EGL_DEPTH_SIZE,     24, //EGL_DONT_CARE,
        EGL_STENCIL_SIZE,   EGL_DONT_CARE,
 EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
 	   //EGL_BIND_TO_TEXTURE_RGBA, EGL_TRUE, 
 
-      //EGL_SAMPLE_BUFFERS, 0,
+      EGL_SAMPLE_BUFFERS, 1,
        EGL_NONE
    };
    

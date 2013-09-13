@@ -8,3 +8,4 @@ mupen64plus
 _obj
 *.o
 *.d
+*.gz
