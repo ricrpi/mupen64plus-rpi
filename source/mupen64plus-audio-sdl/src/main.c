@@ -42,7 +42,7 @@
 /* Default start-time size of primary buffer (in equivalent output samples).
    This is the buffer where audio is loaded after it's extracted from n64's memory.
    This value must be larger than PRIMARY_BUFFER_TARGET */
-#define PRIMARY_BUFFER_MULTIPLE 10
+#define PRIMARY_BUFFER_MULTIPLE 14
 #define PRIMARY_BUFFER_MULTIPLE_MAX 1000
 /* this is the buffer fullness level (in equivalent output samples) which is targeted
    for the primary audio buffer (by inserting delays) each time data is received from
@@ -50,7 +50,7 @@
    Decreasing this value will reduce audio latency but requires a faster PC to avoid
    choppiness. Increasing this will increase audio latency but reduce the chance of
    drop-outs. The default value 10240 gives a 232ms maximum A/V delay at 44.1khz */
-#define PRIMARY_BUFFER_TARGET 8
+#define PRIMARY_BUFFER_TARGET 10
 
 /* Size of secondary buffer, in output samples. This is the requested size of SDL's
    hardware buffer, and the size of the mix buffer for doing SDL volume control. The
@@ -356,7 +356,7 @@ EXPORT void CALL AiDacrateChanged( int SystemType )
  */
 EXPORT void CALL AiLenChanged( void )
 {
-	unsigned int LenReg,AudioBytes;
+	unsigned int LenReg;
 	volatile unsigned char *p;
 	int oldsamplerate, newsamplerate;
 	
@@ -368,11 +368,14 @@ EXPORT void CALL AiLenChanged( void )
 	if (pBuffer == 0)  return;
 
 	LenReg = *AudioInfo.AI_LEN_REG;
-	AudioBytes = ((LenReg * newsamplerate) / oldsamplerate)&0xFFFC;
+	
+	//unsigned int AudioBytes = ((LenReg * newsamplerate) / oldsamplerate)&0xFFFC;
+	
 	p = AudioInfo.RDRAM + (*AudioInfo.AI_DRAM_ADDR_REG & 0xFFFFFF);
 
-	DebugMessage(M64MSG_VERBOSE, "AiLenChanged() buffer = %d to %d (%d), LenReg = %d, +bytes? = %d", uiBufferStart, uiBufferEnd, uiBufferSize, LenReg, AudioBytes );
-
+	//DebugMessage(M64MSG_VERBOSE, "AiLenChanged() buffer = %d to %d (%d), LenReg = %d, +bytes? = %d", uiBufferStart, uiBufferEnd, uiBufferSize, LenReg, AudioBytes );
+	DebugMessage(M64MSG_VERBOSE, "AiLenChanged() %d samples ready for playback", (uiBufferSize) / SDL_SAMPLE_BYTES );
+	
 	// Are we going to overflow the buffer?
 	if ( (uiBufferSize + (LenReg * newsamplerate) / oldsamplerate) > uiBufferMultiple * uiSecondaryBufferSize * SDL_SAMPLE_BYTES)
 	{
@@ -435,7 +438,7 @@ EXPORT void CALL AiLenChanged( void )
 
 			uiBufferEnd += 4;
 			uiBufferSize += 4;
-			if (uiBufferEnd > uiBufferSizeMax) uiBufferEnd -= uiBufferSizeMax;
+			if (uiBufferEnd >= uiBufferSizeMax) uiBufferEnd -= uiBufferSizeMax;
 		}
 	}
 	else if (newsamplerate == oldsamplerate)
@@ -459,7 +462,7 @@ EXPORT void CALL AiLenChanged( void )
 
 		uiBufferEnd += LenReg;
 		uiBufferSize += LenReg;
-		if (uiBufferEnd > uiBufferSizeMax) uiBufferEnd -= uiBufferSizeMax;
+		if (uiBufferEnd >= uiBufferSizeMax) uiBufferEnd -= uiBufferSizeMax;
 	}
 	else // newsamplerate < oldsamplerate, this only happens when speed_factor > 1
 	{
@@ -488,17 +491,17 @@ EXPORT void CALL AiLenChanged( void )
 			j += 4 * oldsamplerate / newsamplerate;
 			uiBufferEnd += 4;
 			uiBufferSize += 4;
-			if (uiBufferEnd > uiBufferSizeMax) uiBufferEnd -= uiBufferSizeMax;
+			if (uiBufferEnd >= uiBufferSizeMax) uiBufferEnd -= uiBufferSizeMax;
 		}
 	}
 
 	SDL_UnlockAudio();
 	//DebugMessage(M64MSG_VERBOSE, "AiLenChanged() now buffer = %d to %d (%d)", uiBufferStart, uiBufferEnd, uiBufferSize);
 
-	if (uiBufferSize >  uiBufferTargetMultiple * uiSecondaryBufferSize * SDL_SAMPLE_BYTES) 
+	if (uiBufferSize >=  uiBufferTargetMultiple * uiSecondaryBufferSize * SDL_SAMPLE_BYTES) 
 	{
 		unsigned int WaitTime =  (1000 *(uiBufferSize - uiBufferTargetMultiple * uiSecondaryBufferSize) / SDL_SAMPLE_BYTES) / OutputFreq;
-		DebugMessage(M64MSG_VERBOSE, "    AiLenChanged(): Waiting %ims", WaitTime);
+		DebugMessage(M64MSG_VERBOSE, "AiLenChanged(): Waiting %ims", WaitTime);
 		if (l_PausedForSync)
 			SDL_PauseAudio(0);
 		l_PausedForSync = 0;
@@ -506,14 +509,14 @@ EXPORT void CALL AiLenChanged( void )
 	}
 	/* Or if the expected level of the primary buffer is less than the secondary buffer size
        (ie, predicting an underflow), then pause the audio to let the emulator catch up to speed */
-	else if (uiBufferSize < uiSecondaryBufferSize * SDL_SAMPLE_BYTES)
+	/*else if (uiBufferSize < uiSecondaryBufferSize * SDL_SAMPLE_BYTES)
 	{
-		DebugMessage(M64MSG_VERBOSE, "    AiLenChanged(): Possible underflow at next audio callback; pausing playback");
+		DebugMessage(M64MSG_VERBOSE, "AiLenChanged(): Possible underflow at next audio callback; pausing playback");
 		if (!l_PausedForSync) SDL_PauseAudio(1);
 		l_PausedForSync = 1;
-	}
+	}*/
 	/* otherwise the predicted buffer level is within our tolerance, so everything is okay */
-	else
+	else if (uiBufferSize >= uiSecondaryBufferSize * SDL_SAMPLE_BYTES)
 	{
 		if (l_PausedForSync) SDL_PauseAudio(0);
 		l_PausedForSync = 0;
@@ -539,35 +542,34 @@ static void my_audio_callback(void *userdata, unsigned char *stream, int len)
 	if (!l_PluginInit) return;
 
 	/* mark the time, for synchronization on the input side */
-	last_callback_ticks = SDL_GetTicks();
 	SDL_LockAudio();
 	if (uiBufferSize >= len)
 	{
 		//Adjust for volume
-		DebugMessage(M64MSG_VERBOSE, "%03i my_audio_callback: used %i samples %d to %d (%d)",
-				last_callback_ticks % 1000, len / SDL_SAMPLE_BYTES, uiBufferStart, uiBufferEnd, uiBufferSize);
+		//DebugMessage(M64MSG_VERBOSE, "%03i my_audio_callback: used %i samples %d to %d (%d)",last_callback_ticks % 1000, len / SDL_SAMPLE_BYTES, uiBufferStart, uiBufferEnd, uiBufferSize);
+		DebugMessage(M64MSG_VERBOSE, "my_audio_callback: used %i samples", len / SDL_SAMPLE_BYTES);
+		
 		SDL_MixAudio(stream, &pBuffer[uiBufferStart], len, VolSDL);
 		
 		uiBufferStart += len;
-		if (uiBufferStart > uiBufferSizeMax) uiBufferStart -= uiBufferSizeMax;
+		if (uiBufferStart >= uiBufferSizeMax) uiBufferStart -= uiBufferSizeMax;
 
 		uiBufferSize -= len;
 
-		DebugMessage(M64MSG_VERBOSE, "%03i my_audio_callback now: used %i samples %d to %d (%d)",
-				last_callback_ticks % 1000, len / SDL_SAMPLE_BYTES, uiBufferStart, uiBufferEnd, uiBufferSize);
+		//DebugMessage(M64MSG_VERBOSE, "%03i my_audio_callback now: used %i samples %d to %d (%d)",last_callback_ticks % 1000, len / SDL_SAMPLE_BYTES, uiBufferStart, uiBufferEnd, uiBufferSize);
 
 		successfullCallbacks++;
 	}
 	else
 	{
 		underrun_count++;
-		DebugMessage(M64MSG_WARNING, "%03i Buffer underflow (%i).  %i samples present, %i needed", // M64MSG_VERBOSE
-				last_callback_ticks % 1000, underrun_count, uiBufferSize/SDL_SAMPLE_BYTES, (len - uiBufferSize)/SDL_SAMPLE_BYTES
-//, successfullCallbacks * 2048 + uiBufferSize/SDL_SAMPLE_BYTES
-);
+		DebugMessage(M64MSG_WARNING, "Buffer underflow (%i).  %i samples present, %i needed", underrun_count, uiBufferSize/SDL_SAMPLE_BYTES, (len - uiBufferSize)/SDL_SAMPLE_BYTES);
 
 		//Dont give old sound to Audio
 		memset(stream , 0, len);
+		
+		SDL_PauseAudio(1);
+		l_PausedForSync = 1;
 
 		successfullCallbacks =0;
 	}
@@ -643,9 +645,9 @@ static void InitializeAudio(int freq)
 		InitializeSDL();
 	}
 
-	if (OutputFreq < 4000) return;
+	if (freq < 4000) return; 			// Sometimes a bad freq is requested so ignoe it 
 	if (critical_failure == 1) return;
-	GameFreq = freq; // This is important for the sync
+	GameFreq = freq; 					// This is important for the sync
 
 	if(hardware_spec != NULL) 
 	{
@@ -657,18 +659,27 @@ static void InitializeAudio(int freq)
 	obtained = malloc(sizeof(SDL_AudioSpec));
 
 	uiOutputFrequencyMode = ConfigGetParamInt(l_ConfigAudio, "DEFAULT_MODE");
-	DebugMessage(M64MSG_VERBOSE, "Output frequency Mode : %i.", uiOutputFrequencyMode);
+	
 	switch (uiOutputFrequencyMode)
 	{
-		case 0:
+		case 0:										// Select Frequency ROM requests
 			OutputFreq = freq;
 			break;
-		case 1:
-			if(freq >= 44100) OutputFreq = 44100;
-			else if(freq >= 22050) OutputFreq = 22050;
-			else OutputFreq = 11025;
+		case 1:										// Select Frequency less than ROM frequency
+			if(freq >= 44100)
+			{
+				OutputFreq = 44100;
+			}
+			else if(freq >= 22050)
+			{
+				OutputFreq = 22050;
+			}
+			else 
+			{
+				OutputFreq = 11025;
+			}
 			break;
-		default: 
+		default: 									// User override frequency
 			if (uiOutputFrequencyMode >= 11025)
 			{
 				OutputFreq = uiOutputFrequencyMode;
@@ -682,7 +693,7 @@ static void InitializeAudio(int freq)
  
 	desired->freq = OutputFreq;
 
-	DebugMessage(M64MSG_VERBOSE, "Requesting frequency: %iHz.", desired->freq);
+	DebugMessage(M64MSG_VERBOSE, "Requesting frequency: %iHz. (Mode %d)", desired->freq, uiOutputFrequencyMode);
 	/* 16-bit signed audio */
 	desired->format=AUDIO_S16SYS;
 	DebugMessage(M64MSG_VERBOSE, "Requesting format: %i.", desired->format);
@@ -724,14 +735,14 @@ static void InitializeAudio(int freq)
 	OutputFreq = hardware_spec->freq;
 	uiSecondaryBufferSize = hardware_spec->samples;
 
-	if (uiBufferMultiple < 5) uiBufferMultiple = 5;
+	if (uiBufferMultiple < 4) uiBufferMultiple = 4;
 	if (uiBufferMultiple > PRIMARY_BUFFER_MULTIPLE_MAX)
 	{ 
 		DebugMessage(M64MSG_VERBOSE, "Limiting PRIMARY_BUFFER_MULTIPLE to %d", PRIMARY_BUFFER_MULTIPLE_MAX);
 		uiBufferMultiple = PRIMARY_BUFFER_MULTIPLE_MAX;
 	}
 	
-	if (uiBufferTargetMultiple < uiBufferMultiple) uiBufferTargetMultiple = uiBufferMultiple + 2;
+	if (uiBufferTargetMultiple < uiBufferMultiple) uiBufferTargetMultiple = uiBufferMultiple - 2;
 	if (uiBufferTargetMultiple > 9000)
 	{ 
 		DebugMessage(M64MSG_VERBOSE, "Limiting PRIMARY_BUFFER_TARGET to 9000");
@@ -766,11 +777,12 @@ static void InitializeAudio(int freq)
 }
 EXPORT void CALL RomClosed( void )
 {
+	DebugMessage(M64MSG_VERBOSE, "Cleaning up RPI sound plugin...");
 	if (!l_PluginInit)
 		return;
 	if (critical_failure == 1)
 		return;
-	DebugMessage(M64MSG_VERBOSE, "Cleaning up RPI sound plugin...");
+	
 
 	// Shut down SDL Audio output
 	SDL_PauseAudio(1);
