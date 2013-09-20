@@ -297,7 +297,7 @@ INSTALL  ?= install
 MKDIR ?= mkdir -p
 COMPILE.c = $(Q_CC)$(CC) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
 COMPILE.cc = $(Q_CXX)$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
-LINK.o = $(Q_LD)$(CXX) -g $(patsubst -O3,-O2,$(CXXFLAGS)) $(LDFLAGS) $(TARGET_ARCH)
+LINK.o = $(Q_LD)$(CXX) $(patsubst -O3,-O2,$(CXXFLAGS)) $(LDFLAGS) $(TARGET_ARCH)
 
 ifeq ($(OS),OSX)
   LDCONFIG ?= true  # no 'ldconfig' under OSX
@@ -325,7 +325,8 @@ else
     LDFLAGS += -g
     INSTALL_STRIP_FLAG ?= 
   else
-    CFLAGS += -O3
+    CFLAGS += -O3 
+	# -funroll-loops: doesn't make any perceivable difference but adds 1.26 Mb to core size
     ifneq ($(OS),OSX)
       INSTALL_STRIP_FLAG ?= -s
 	endif

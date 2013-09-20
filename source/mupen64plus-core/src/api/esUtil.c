@@ -62,10 +62,17 @@ static EGLBoolean CreateEGLContext ( EGLNativeWindowType hWnd, EGLDisplay* eglDi
    EGLConfig config;
 
    #ifndef RPI_NO_X
-   EGLint contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE, EGL_NONE };
+   EGLint contextAttribs[] = { 
+		EGL_CONTEXT_CLIENT_VERSION, 2,
+		EGL_NONE, EGL_NONE };
    #else
    EGLint contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
    #endif
+ /*	EGLint PBufferAttribs[] = { 
+		EGL_WIDTH, 640,
+		EGL_HEIGHT, 480,
+		EGL_NONE
+	};*/
 
    // Get Display
    #ifndef RPI_NO_X
@@ -107,10 +114,8 @@ static EGLBoolean CreateEGLContext ( EGLNativeWindowType hWnd, EGLDisplay* eglDi
    }
 
    // Create a surface
-   surface = eglCreateWindowSurface(display, config, 
-//(EGLNativeWindowType)display, 
- (EGLNativeWindowType)hWnd,
- NULL);
+   surface = eglCreateWindowSurface(display, config, (EGLNativeWindowType)hWnd, NULL);
+   //surface = eglCreatePbufferSurface(display, config, PBufferAttribs);
    if ( surface == EGL_NO_SURFACE )
    {
 	DebugMessage(M64MSG_ERROR, "Could not Create EGL Surface");

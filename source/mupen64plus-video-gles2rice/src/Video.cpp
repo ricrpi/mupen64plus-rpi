@@ -975,21 +975,9 @@ EXPORT void CALL ReadScreen2(void *dest, int *width, int *height, int bFront)
     if (dest == NULL)
         return;
 
-#if SDL_VIDEO_OPENGL
-    GLint oldMode;
-    glGetIntegerv( GL_READ_BUFFER, &oldMode );
-    if (bFront)
-        glReadBuffer( GL_FRONT );
-    else
-        glReadBuffer( GL_BACK );
-    glReadPixels( 0, 0, windowSetting.uDisplayWidth, windowSetting.uDisplayHeight,
-                 GL_RGBA, GL_UNSIGNED_BYTE, dest );
-
-    glReadBuffer( oldMode );
-#else
+	// we have to use GL_RGBA on Raspberry pi
 	glReadPixels( 0, 0, windowSetting.uDisplayWidth, windowSetting.uDisplayHeight,
                  GL_RGBA, GL_UNSIGNED_BYTE, dest );
-#endif
 }
     
 

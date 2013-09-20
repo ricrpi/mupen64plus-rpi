@@ -412,9 +412,8 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
     status.gFrameCount++;
 
     glFlush();
-	//glFinish();
     OPENGL_CHECK_ERRORS;
-    //glFinish();
+
     //wglSwapIntervalEXT(0);
 
     /*
@@ -483,7 +482,10 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
          lastTick = nowTick;
       }
      }*/
-    
+    glEnable(GL_DEPTH_TEST);
+	OPENGL_CHECK_ERRORS;
+
+    OPENGL_CHECK_ERRORS;
 	glDepthMask(GL_TRUE);
     OPENGL_CHECK_ERRORS;
 

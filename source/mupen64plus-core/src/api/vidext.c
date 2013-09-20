@@ -200,8 +200,7 @@ EXPORT m64p_error CALL VidExt_SetVideoMode(int Width, int Height, int BitsPerPix
 	result = esInitContext ( &esContext );
 
 	if (M64ERR_SUCCESS == result) esCreateWindow ( &esContext, "Mupen64plus", Width, Height, ES_WINDOW_RGB );
-	Init (&esContext );
-
+	
 	return result;
 }
 
@@ -385,7 +384,12 @@ EXPORT m64p_error CALL VidExt_GL_GetAttribute(m64p_GLattr Attr, int *pValue)
 
 EXPORT m64p_error CALL VidExt_GL_SwapBuffers(void)
 {
+	/*static uint32_t count	= 0;
+	static uint32_t sum		= 0;
+	static uint32_t time, time2;
 
+	time2 = SDL_GetTicks();
+*/
 	//Draw(&esContext);
     /* call video extension override if necessary */
     if (l_VideoExtensionActive)
@@ -393,159 +397,18 @@ EXPORT m64p_error CALL VidExt_GL_SwapBuffers(void)
 
     eglSwapBuffers(esContext.eglDisplay, esContext.eglSurface);
 
+	/*time = SDL_GetTicks();
+	
+	count ++;
+	sum = sum + (time - time2);
+
+	if (count >= 32)
+	{	
+		DebugMessage(M64MSG_INFO, "eglSwapBuffers() took %d ms on average", sum/count);
+		count = 0;
+		sum   = 0;
+	}
+*/
     return M64ERR_SUCCESS;
 }
-
-//-----------------------------------------------------------------------
-
-typedef struct
-{
-   // Handle to a program object
-   GLuint programObject;
-
-} UserData;
-
-GLuint LoadShader ( GLenum type, const GLbyte *shaderSrc )
-{
-   GLuint shader;
-   GLint compiled;
-   
-   // Create the shader object
-   shader = glCreateShader ( type );
-
-   if ( shader == 0 )
-   	return 0;
-
-   // Load the shader source
-   glShaderSource ( shader, 1, &shaderSrc, NULL );
-   
-   // Compile the shader
-   glCompileShader ( shader );
-
-   // Check the compile status
-   glGetShaderiv ( shader, GL_COMPILE_STATUS, &compiled );
-
-   if ( !compiled ) 
-   {
-      GLint infoLen = 0;
-
-      glGetShaderiv ( shader, GL_INFO_LOG_LENGTH, &infoLen );
-      
-      if ( infoLen > 1 )
-      {
-         char* infoLog = malloc (sizeof(char) * infoLen );
-
-         glGetShaderInfoLog ( shader, infoLen, NULL, infoLog );
-         DebugMessage(M64MSG_ERROR, "Error compiling shader:\n%s\n", infoLog );            
-         
-         free ( infoLog );
-      }
-
-      glDeleteShader ( shader );
-      return 0;
-   }
-
-   return shader;
-
-}
-
-int Init ( ESContext *esContext )
-{
-   esContext->userData = malloc(sizeof(UserData));
-
-   UserData *userData = esContext->userData;
-   GLbyte vShaderStr[] =  
-      "attribute vec4 vPosition;    \n"
-      "void main()                  \n"
-      "{                            \n"
-      "   gl_Position = vPosition;  \n"
-      "}                            \n";
-   
-   GLbyte fShaderStr[] =  
-      "precision mediump float;\n"\
-      "void main()                                  \n"
-      "{                                            \n"
-      "  gl_FragColor = vec4 ( 1.0, 0.0, 0.0, 1.0 );\n"
-      "}                                            \n";
-
-   GLuint vertexShader;
-   GLuint fragmentShader;
-   GLuint programObject;
-   GLint linked;
-
-   // Load the vertex/fragment shaders
-   vertexShader = LoadShader ( GL_VERTEX_SHADER, vShaderStr );
-   fragmentShader = LoadShader ( GL_FRAGMENT_SHADER, fShaderStr );
-
-   // Create the program object
-   programObject = glCreateProgram ( );
-   
-   if ( programObject == 0 )
-      return 0;
-
-   glAttachShader ( programObject, vertexShader );
-   glAttachShader ( programObject, fragmentShader );
-
-   // Bind vPosition to attribute 0   
-   glBindAttribLocation ( programObject, 0, "vPosition" );
-
-   // Link the program
-   glLinkProgram ( programObject );
-
-   // Check the link status
-   glGetProgramiv ( programObject, GL_LINK_STATUS, &linked );
-
-   if ( !linked ) 
-   {
-      GLint infoLen = 0;
-
-      glGetProgramiv ( programObject, GL_INFO_LOG_LENGTH, &infoLen );
-      
-      if ( infoLen > 1 )
-      {
-         char* infoLog = malloc (sizeof(char) * infoLen );
-
-         glGetProgramInfoLog ( programObject, infoLen, NULL, infoLog );
-         DebugMessage(M64MSG_ERROR, "Error linking program:\n%s\n", infoLog );            
-         
-         free ( infoLog );
-      }
-
-      glDeleteProgram ( programObject );
-      return GL_FALSE;
-   }
-
-   // Store the program object
-   userData->programObject = programObject;
-
-   glClearColor ( 0.0f, 0.0f, 0.0f, 1.0f );
-   return GL_TRUE;
-}
-
-///
-// Draw a triangle using the shader pair created in Init()
-//
-void Draw ( ESContext *esContext )
-{
-   UserData *userData = esContext->userData;
-   GLfloat vVertices[] = {  0.0f,  0.5f, 0.0f, 
-                           -0.5f, -0.5f, 0.0f,
-                            0.5f, -0.5f, 0.0f };
-      
-   // Set the viewport
-   glViewport ( 0, 0, esContext->width, esContext->height );
-   
-   // Clear the color buffer
-   glClear ( GL_COLOR_BUFFER_BIT );
-
-   // Use the program object
-   glUseProgram ( userData->programObject );
-
-   // Load the vertex data
-   glVertexAttribPointer ( 0, 3, GL_FLOAT, GL_FALSE, 0, vVertices );
-   glEnableVertexAttribArray ( 0 );
-
-   glDrawArrays ( GL_TRIANGLES, 0, 3 );
-}
-
 
