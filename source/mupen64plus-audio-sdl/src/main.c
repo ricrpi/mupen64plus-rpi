@@ -29,6 +29,8 @@
 
 #include "bcm_host.h"
 #include "ilclient.h"
+#include "interface/vmcs_host/vc_tvservice.h"
+
 
 #define M64P_PLUGIN_PROTOTYPES 1
 #include "m64p_types.h"
@@ -54,6 +56,15 @@ extern uint32_t SDL_GetTicks(void);
    They tend to rely on a default frequency, apparently, never the same one ;)*/
 #define DEFAULT_FREQUENCY 33600
 
+/* This is the mode for selecting the output frequency for the Audio plugin
+	MODE 0 Force use ROM frequency (or DEFAULT if not set)
+	MODE 1 Auto. HDMI is queried to check game frequency is supported.
+	MODE 2 is to use 11025, 22050, 44100 if <= ROM frequency
+	MODE 3 is to use 11025, 22050, 44100 if > ROM frequency
+	MODE N is the frequency to use for sound output
+*/
+#define DEFAULT_MODE 1
+
 /* Default audio output on HDMI (1) or analogue port (0) */
 #define OUTPUT_PORT 1
 
@@ -61,7 +72,7 @@ extern uint32_t SDL_GetTicks(void);
 #define DEFAULT_LATENCY 100
 
 /* Number of buffers used by Audio*/
-#define DEFAULT_NUM_BUFFERS 10
+#define DEFAULT_NUM_BUFFERS 100
 
 
 #define SAMPLE_SIZE_BITS 	16
@@ -109,12 +120,15 @@ static unsigned int speed_factor = 100;
 // If this is true then left and right channels are swapped */
 static unsigned int bSwapChannels = 0;
 
+// This is the frequency mode or Target Output Frequency
+static unsigned int uiOutputFrequencyMode = DEFAULT_MODE;
+
 // Size of Secondary audio buffer in output samples
 static unsigned int uiSecondaryBufferSamples = SECONDARY_BUFFER_SIZE;
 
 static unsigned int uiOutputPort = OUTPUT_PORT;
 
-static unsigned int OutputFreq = 22050;
+static unsigned int OutputFreq = 44100;
 
 static unsigned int uiLatency = DEFAULT_LATENCY;
 
@@ -266,10 +280,11 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle, void *Con
 	ConfigSetDefaultBool(l_ConfigAudio, "SWAP_CHANNELS",        0,                     		"Swaps left and right channels");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"SECONDARY_BUFFER_SIZE",SECONDARY_BUFFER_SIZE, 		"Number of output samples per Audio callback. This is SDL's hardware buffer.");
     ConfigSetDefaultInt(l_ConfigAudio, 	"OUTPUT_PORT",   		OUTPUT_PORT,   				"Audio output to go to (0) Analogue jack, (1) HDMI");
-	ConfigSetDefaultInt(l_ConfigAudio, 	"LATENCY",      		20,                     	"Desired Latency in ms");
+	ConfigSetDefaultInt(l_ConfigAudio, "DEFAULT_MODE",     	    DEFAULT_MODE,          "Audio Output Frequncy mode: 0 = Rom Frequency, 1 ROM Frequency if supported (HDMI only), 2 = Standard frequency < Rom Frequency, 3 = Standard frequency > Rom Frequency, [N] Force output frequency");
+	ConfigSetDefaultInt(l_ConfigAudio, 	"LATENCY",      		DEFAULT_LATENCY,           	"Desired Latency in ms");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"VOLUME_ADJUST",        5,                     		"Percentage change each time the volume is increased or decreased");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"VOLUME_DEFAULT",       80,                    		"Default volume when a game is started");
-	ConfigSetDefaultInt(l_ConfigAudio,	"DEFAULT_NUM_BUFFERS",	10,							"The number of Audio buffers to use");
+	ConfigSetDefaultInt(l_ConfigAudio,	"DEFAULT_NUM_BUFFERS",	DEFAULT_NUM_BUFFERS,		"The number of Audio buffers to use");
 	if (bSaveConfig && ConfigAPIVersion >= 0x020100)
 		ConfigSaveSection("Audio-RPI");
 
@@ -334,6 +349,8 @@ EXPORT void CALL AiDacrateChanged( int SystemType )
 	}
 	InitializeAudio(f);
 }
+
+//=================== Raspberry PI Native Audio functions ==============================
 
 static void input_buffer_callback(void *data, COMPONENT_T *comp)
 {
@@ -423,43 +440,25 @@ static int32_t audioplay_create(AUDIOPLAY_STATE_T **handle,
          pcm.nBitPerSample = bit_depth;
          pcm.ePCMMode = OMX_AUDIO_PCMModeLinear;
 
-         switch(num_channels) {
-         case 1:
-            pcm.eChannelMapping[0] = OMX_AUDIO_ChannelCF;
-            break;
-         case 3:
-            pcm.eChannelMapping[2] = OMX_AUDIO_ChannelCF;
+        if(bSwapChannels == 0)
+		{
             pcm.eChannelMapping[1] = OMX_AUDIO_ChannelRF;
             pcm.eChannelMapping[0] = OMX_AUDIO_ChannelLF;
-            break;
-         case 8:
-            pcm.eChannelMapping[7] = OMX_AUDIO_ChannelRS;
-         case 7:
-            pcm.eChannelMapping[6] = OMX_AUDIO_ChannelLS;
-         case 6:
-            //pcm.eChannelMapping[5] = OMX_AUDIO_ChannelRR;
-         case 5:
-            //pcm.eChannelMapping[4] = OMX_AUDIO_ChannelLR;
-         case 4:
-            //pcm.eChannelMapping[3] = OMX_AUDIO_ChannelLFE;
-            //pcm.eChannelMapping[2] = OMX_AUDIO_ChannelCF;
-			pcm.eChannelMapping[3] = OMX_AUDIO_ChannelRR;
-			pcm.eChannelMapping[2] = OMX_AUDIO_ChannelLR;
-         case 2:
-            pcm.eChannelMapping[1] = OMX_AUDIO_ChannelRF;
-            pcm.eChannelMapping[0] = OMX_AUDIO_ChannelLF;
-            break;
+            
          }
+		else
+		{
+			pcm.eChannelMapping[1] = OMX_AUDIO_ChannelLF;
+            pcm.eChannelMapping[0] = OMX_AUDIO_ChannelRF;
+		}
 
          error = OMX_SetParameter(ILC_GET_HANDLE(st->audio_render), OMX_IndexParamAudioPcm, &pcm);
          if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: Failed to Set OMX Parameters",__LINE__);
 
          ilclient_change_component_state(st->audio_render, OMX_StateIdle);
 
-		/* TODO arg 3 and 4 set the function to malloc / free buffers. This could be optimized to a 
-			pre-malloc'ed ring buffer*/
-         if(ilclient_enable_port_buffers(st->audio_render, 100, NULL, NULL, NULL) < 0)
-         {
+		if(ilclient_enable_port_buffers(st->audio_render, 100, NULL, NULL, NULL) < 0)
+        {
             // error
             ilclient_change_component_state(st->audio_render, OMX_StateLoaded);
             ilclient_cleanup_components(st->list);
@@ -473,11 +472,11 @@ static int32_t audioplay_create(AUDIOPLAY_STATE_T **handle,
             free(st);
             *handle = NULL;
             return -1;
-	}
-	DebugMessage(M64MSG_INFO, "RPI Audio plugin Initialized. Output Frequency %d Hz", OutputFreq);
-	ilclient_change_component_state(st->audio_render, OMX_StateExecuting);
-	}
-    }
+		}
+		DebugMessage(M64MSG_INFO, "RPI Audio plugin Initialized. Output Frequency %d Hz", OutputFreq);
+		ilclient_change_component_state(st->audio_render, OMX_StateExecuting);
+	 }
+   }
 	
 	return ret;
 }
@@ -533,11 +532,6 @@ static int32_t audioplay_play_buffer(AUDIOPLAY_STATE_T *st,
    	OMX_BUFFERHEADERTYPE *hdr = NULL, *prev = NULL;
    	int32_t ret = -1;
 
-   	if(length % st->bytes_per_sample)
-	{
-		DebugMessage(M64MSG_ERROR, "Line %d: Buffer length is not correct. Not playing buffer", __LINE__);
-      	return ret;
-	}
    	sem_wait(&st->sema);
 
    	// search through user list for the right buffer header
@@ -571,10 +565,6 @@ static int32_t audioplay_play_buffer(AUDIOPLAY_STATE_T *st,
       	if(error != OMX_ErrorNone)
 		{
 			DebugMessage(M64MSG_ERROR, "Line %d: Failed on OMX_EmptyThisBuffer()",__LINE__);
-		}
-		else
-		{
-			DebugMessage(M64MSG_VERBOSE, "Playing buffer at 0x%X, hdr = 0x8%X", buffer, hdr);
 		}
    	}
 	else
@@ -627,14 +617,10 @@ uint32_t audioplay_get_latency(AUDIOPLAY_STATE_T *st)
 }
 
 
-static uint32_t SendBufferToAudio(int16_t *pCurrentBuffer)
+static uint32_t SendBufferToAudio(int32_t *pCurrentBuffer)
 {
 	uint32_t 		latency;
 	static uint32_t uiUnderRunCount = 0;
-
-	#if NUM_CHANNELS > 2
-		memcpy(&pCurrentBuffer[uiSecondaryBufferSamples * 2], pCurrentBuffer, 2 * uiSecondaryBufferSamples * sizeof(int16_t))
-	#endif
 
 	// try and wait for a minimum latency time (in ms) before
 	// sending the next packet
@@ -663,33 +649,25 @@ static uint32_t SendBufferToAudio(int16_t *pCurrentBuffer)
 EXPORT void CALL AiLenChanged( void )
 {
 	uint32_t 		uiAudioBytes;
-	uint32_t 		latency;
-	uint32_t		time 			= 0;
-	static int16_t 	*pCurrentBuffer = NULL;
+	static int32_t 	*pCurrentBuffer = NULL;
 	static uint32_t uiBufferIndex 	= 0;
-	volatile int16_t *p;
+	volatile int32_t *p;
+	
 	int oldsamplerate, newsamplerate;
 	
 	newsamplerate = OutputFreq * 100 / speed_factor;
-	oldsamplerate = GameFreq / 2;				//GameFreq is frequency of 2 samples
+	oldsamplerate = GameFreq;
 	
 	if (critical_failure == 1) return;
 	if (!l_PluginInit) return;
-	
-	time = SDL_GetTicks();
-
+		
 	uiAudioBytes = (uint32_t)(*AudioInfo.AI_LEN_REG);
-	
-	//unsigned int AudioBytes = ((uiAudioBytes * newsamplerate) / oldsamplerate)&0xFFFC;
-	
-	p = (int16_t*)(AudioInfo.RDRAM + (*AudioInfo.AI_DRAM_ADDR_REG & 0xFFFFFF));
 
-	//DebugMessage(M64MSG_INFO, "uiAudioBytes = %d, uiBufferIndex = %d", uiAudioBytes, uiBufferIndex);
-	//DebugMessage(M64MSG_INFO, "in  %8d %8d %8d %8d %8d %8d %8d %8d",p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7]);
+	p = (int32_t*)(AudioInfo.RDRAM + (*AudioInfo.AI_DRAM_ADDR_REG & 0xFFFFFF));
 
 	if (pCurrentBuffer == NULL)
     	{
-		while((pCurrentBuffer = (int16_t*)audioplay_get_buffer(st)) == NULL) usleep(1*1000);
+		while((pCurrentBuffer = (int32_t*)audioplay_get_buffer(st)) == NULL) usleep(1*1000);
 	}
 	
 	// ------------------------------- Copy music into audio buffer -----------------------------
@@ -705,19 +683,13 @@ EXPORT void CALL AiLenChanged( void )
 
 		while (j < uiAudioBytes)
 		{
-			if(bSwapChannels == 0)
-			{
-				pCurrentBuffer[ uiBufferIndex ]     = p[1];
-				pCurrentBuffer[ uiBufferIndex + uiSecondaryBufferSamples ] = p[0];
-			} else {
-				pCurrentBuffer[ uiBufferIndex ]     = p[0];
-				pCurrentBuffer[ uiBufferIndex + uiSecondaryBufferSamples ] = p[1];
-			}
+			pCurrentBuffer[ uiBufferIndex ]     = *p;
+			
 			uiBufferIndex ++;
 			
 			if(criteria >= 0)
 			{
-				p+=2;
+				p++;
 				j+=4;
 				criteria += const1;
 			}
@@ -731,12 +703,39 @@ EXPORT void CALL AiLenChanged( void )
 				SendBufferToAudio(pCurrentBuffer);
 				uiBufferIndex = 0;
 				
-				while((pCurrentBuffer = (int16_t*)audioplay_get_buffer(st)) == NULL)
+				while((pCurrentBuffer = (int32_t*)audioplay_get_buffer(st)) == NULL)
 				{ 
 					DebugMessage(M64MSG_VERBOSE, "Can't get next pCurrentBuffer for Audio");	
 					usleep(1*1000);
 				}
 			}
+		}
+	}
+	else if (newsamplerate == oldsamplerate)
+	{
+		if (uiBufferIndex + (uiAudioBytes / sizeof(int32_t)) >= uiSecondaryBufferSamples)
+		{
+			uint32_t bytesCanCopy = (uiSecondaryBufferSamples - uiBufferIndex)*sizeof(int32_t);
+			
+			memcpy((void*) &pCurrentBuffer[ uiBufferIndex ],(const void*) p, bytesCanCopy); 
+					
+			SendBufferToAudio(pCurrentBuffer);
+			
+			while((pCurrentBuffer = (int32_t*)audioplay_get_buffer(st)) == NULL)
+			{ 
+				DebugMessage(M64MSG_VERBOSE, "Can't get next pCurrentBuffer for Audio");	
+				usleep(1*1000);
+			}
+
+			p+=	bytesCanCopy/sizeof(int32_t);
+			
+			memcpy((void*) pCurrentBuffer,(const void*) p, uiAudioBytes - bytesCanCopy); 
+			uiBufferIndex = (uiAudioBytes - bytesCanCopy) / sizeof(int32_t);
+		}
+		else
+		{
+			memcpy((void*) &pCurrentBuffer[ uiBufferIndex ],(const void*) p, uiAudioBytes); 
+			uiBufferIndex += uiAudioBytes / sizeof(int32_t);
 		}
 	}
 	else // newsamplerate < oldsamplerate, this only happens when speed_factor > 1
@@ -745,16 +744,10 @@ EXPORT void CALL AiLenChanged( void )
 
 		while (j < uiAudioBytes )
 		{
-			if(bSwapChannels == 0)
-			{
-				pCurrentBuffer[ uiBufferIndex ] = p[ 1 ];
-				pCurrentBuffer[ uiBufferIndex + uiSecondaryBufferSamples ] = p[ 0 ];
-			} else {
-				pCurrentBuffer[ uiBufferIndex ] = p[ 0 ];
-				pCurrentBuffer[ uiBufferIndex + uiSecondaryBufferSamples ] = p[ 1 ];
-			}
+			pCurrentBuffer[ uiBufferIndex ] = *p;
+			
 			j += 4 * oldsamplerate / newsamplerate;
-			p += 2 * oldsamplerate / newsamplerate;
+			p += (oldsamplerate / newsamplerate);
 			
 			uiBufferIndex ++;
 
@@ -763,7 +756,7 @@ EXPORT void CALL AiLenChanged( void )
 				SendBufferToAudio(pCurrentBuffer);
 				uiBufferIndex = 0;
 				
-				while((pCurrentBuffer = (int16_t*)audioplay_get_buffer(st)) == NULL)
+				while((pCurrentBuffer = (int32_t*)audioplay_get_buffer(st)) == NULL)
 				{ 
 					DebugMessage(M64MSG_VERBOSE, "Can't get next pCurrentBuffer for Audio");	
 					usleep(1*1000);
@@ -771,12 +764,6 @@ EXPORT void CALL AiLenChanged( void )
 			}
 		}
 	}
-	
-	//DebugMessage(M64MSG_VERBOSE, "out %8d %8d %8d %8d %8d %8d %8d %8d",pCurrentBuffer[0],pCurrentBuffer[1],pCurrentBuffer[2],pCurrentBuffer[3],pCurrentBuffer[4],pCurrentBuffer[5],pCurrentBuffer[6],pCurrentBuffer[7]);
-
-		//latency = audioplay_get_latency(st);
-		//DebugMessage(M64MSG_INFO, "%6d latency = %d", time, latency);
-
 }
 
 EXPORT int CALL InitiateAudio( AUDIO_INFO Audio_Info )
@@ -794,6 +781,7 @@ EXPORT int CALL RomOpen(void)
 	if (!l_PluginInit) return 0;
 
 	ReadConfig();
+	
 	InitializeAudio(GameFreq);
 	return 1;
 }
@@ -807,6 +795,72 @@ static void InitializeAudio(int freq)
 
 
 	int buffer_size = (uiSecondaryBufferSamples * SAMPLE_SIZE_BITS * OUT_CHANNELS(NUM_CHANNELS))>>3;
+	
+	switch (uiOutputFrequencyMode)
+	{
+		case 0:										// Select Frequency ROM requests
+			OutputFreq = freq;
+			break;
+		case 1:										//Audo
+			if (uiOutputPort == 1)
+			{
+				if (0 == vc_tv_hdmi_audio_supported(EDID_AudioFormat_ePCM, OUT_CHANNELS(NUM_CHANNELS), freq, SAMPLE_SIZE_BITS)) 
+				{
+					DebugMessage(M64MSG_VERBOSE, "HDMI supports requested Frequency");
+					break;
+				}
+			DebugMessage(M64MSG_VERBOSE, "HDMI failed to get requested Frequency");
+			}
+			else
+			{
+				DebugMessage(M64MSG_VERBOSE, "Analogue Mode 1 not supported. Selecting Mode 2");
+			}		
+		case 2:										// Select Frequency less than ROM frequency
+			if(freq >= 44100)
+			{
+				OutputFreq = 44100;
+			}
+			else if(freq >= 32000)
+			{
+				OutputFreq = 32000;
+			}
+			else if(freq >= 22050)
+			{
+				OutputFreq = 22050;
+			}
+			else 
+			{
+				OutputFreq = 11025;
+			}
+			break;
+		case 3:
+			if(freq < 11025)
+			{
+				OutputFreq = 11025;
+			}
+			else if(freq < 22050)
+			{
+				OutputFreq = 22050;
+			}
+			else if(freq < 32000)
+			{
+				OutputFreq = 32000;
+			}else 
+			{
+				OutputFreq = 44100;
+			}
+			break;
+		default: 									// User override frequency
+			if (uiOutputFrequencyMode >= 11025)
+			{
+				OutputFreq = uiOutputFrequencyMode;
+			}
+			else
+			{
+				OutputFreq = 22050; 
+			}	
+			break;
+	}
 
 	//if (st != NULL) audioplay_delete(st);
 
@@ -850,6 +904,7 @@ static void ReadConfig(void)
 	VolDelta = 					ConfigGetParamInt(l_ConfigAudio, "VOLUME_ADJUST");
 	VolPercent = 				ConfigGetParamInt(l_ConfigAudio, "VOLUME_DEFAULT");
 	uiNumBuffers = 				ConfigGetParamInt(l_ConfigAudio, "DEFAULT_NUM_BUFFERS");
+	uiOutputFrequencyMode = 	ConfigGetParamInt(l_ConfigAudio, "DEFAULT_MODE");
 
 	if (uiLatency <= MIN_LATENCY_TIME) uiLatency = MIN_LATENCY_TIME + 1;
 
