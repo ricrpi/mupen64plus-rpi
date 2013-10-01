@@ -124,8 +124,8 @@ CFLAGS += $(OPTFLAGS) $(WARNFLAGS) -ffast-math -fno-strict-aliasing -fvisibility
 LDFLAGS += $(SHARED)
 
 ifeq ("$(MACHINE)","armv6l")
-CFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux -I/opt/vc/src/hello_pi/libs/ilclient -DHAVE_LIBOPENMAX=2 -DOMX -DOMX_SKIP64BIT -DUSE_EXTERNAL_OMX -DHAVE_LIBBCM_HOST -DUSE_EXTERNAL_LIBBCM_HOST -DUSE_VCHIQ_ARM
-LDLIBS += -lm -L/opt/vc/lib -L/opt/vc/src/hello_pi/libs/ilclient -lbcm_host -lvcos -lvchiq_arm -lilclient -lopenmaxil
+CFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux -DHAVE_LIBOPENMAX=2 -DOMX -DOMX_SKIP64BIT -DUSE_EXTERNAL_OMX -DHAVE_LIBBCM_HOST -DUSE_EXTERNAL_LIBBCM_HOST -DUSE_VCHIQ_ARM
+LDLIBS += -lm -L/opt/vc/lib -lbcm_host -lvcos -lvchiq_arm -lopenmaxil
 endif
 
 # Since we are building a shared library, we must compile with -fPIC on some architectures
@@ -270,6 +270,8 @@ OBJDIR = _obj$(POSTFIX)
 # list of source files to compile
 SOURCE = \
 	$(SRCDIR)/main.c \
+	$(SRCDIR)/ilclient.c \
+	$(SRCDIR)/ilcore.c \
 	$(SRCDIR)/volume.c
 
 ifeq ($(OS),MINGW)
