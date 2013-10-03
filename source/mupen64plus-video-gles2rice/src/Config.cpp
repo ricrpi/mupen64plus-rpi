@@ -317,14 +317,10 @@ BOOL InitConfiguration(void)
 
     ConfigSetDefaultInt(l_ConfigVideoRice, "FrameBufferSetting", FRM_BUF_NONE, "Frame Buffer Emulation (0=ROM default, 1=disable)");
     ConfigSetDefaultInt(l_ConfigVideoRice, "FrameBufferWriteBackControl", FRM_BUF_WRITEBACK_NORMAL, "Frequency to write back the frame buffer (0=every frame, 1=every other frame, etc)");
-    ConfigSetDefaultInt(l_ConfigVideoRice, "RenderToTexture", TXT_BUF_NONE, "Render-to-texture emulation (0=none, 1=ignore, 2=normal, 3=write back, 4=write back and reload)");
-#if defined(WIN32)
-    ConfigSetDefaultInt(l_ConfigVideoRice, "ScreenUpdateSetting", SCREEN_UPDATE_AT_1ST_CI_CHANGE, "Control when the screen will be updated (0=ROM default, 1=VI origin update, 2=VI origin change, 3=CI change, 4=first CI change, 5=first primitive draw, 6=before screen clear, 7=after screen drawn)");  // SCREEN_UPDATE_AT_VI_UPDATE_AND_DRAWN
-#else
-    ConfigSetDefaultInt(l_ConfigVideoRice, "ScreenUpdateSetting", SCREEN_UPDATE_AT_VI_UPDATE, "Control when the screen will be updated (0=ROM default, 1=VI origin update, 2=VI origin change, 3=CI change, 4=first CI change, 5=first primitive draw, 6=before screen clear, 7=after screen drawn)");  // SCREEN_UPDATE_AT_VI_UPDATE_AND_DRAWN
-#endif
+    ConfigSetDefaultInt(l_ConfigVideoRice, "RenderToTexture", TXT_BUF_NORMAL, "Render-to-texture emulation (0=none, 1=ignore, 2=normal, 3=write back, 4=write back and reload)");
+    ConfigSetDefaultInt(l_ConfigVideoRice, "ScreenUpdateSetting", SCREEN_UPDATE_BEFORE_SCREEN_CLEAR, "Control when the screen will be updated (0=ROM default, 1=VI origin update, 2=VI origin change, 3=CI change, 4=first CI change, 5=first primitive draw, 6=before screen clear, 7=after screen drawn)");  // SCREEN_UPDATE_AT_VI_UPDATE_AND_DRAWN
     ConfigSetDefaultBool(l_ConfigVideoRice, "NormalAlphaBlender", FALSE, "Force to use normal alpha blender");
-    ConfigSetDefaultBool(l_ConfigVideoRice, "FastTextureLoading", FALSE, "Use a faster algorithm to speed up texture loading and CRC computation");
+    ConfigSetDefaultBool(l_ConfigVideoRice, "FastTextureLoading", TRUE, "Use a faster algorithm to speed up texture loading and CRC computation");
     ConfigSetDefaultBool(l_ConfigVideoRice, "AccurateTextureMapping", TRUE, "Use different texture coordinate clamping code");
     ConfigSetDefaultBool(l_ConfigVideoRice, "InN64Resolution", FALSE, "Force emulated frame buffers to be in N64 native resolution");
     ConfigSetDefaultBool(l_ConfigVideoRice, "SaveVRAM", FALSE, "Try to reduce Video RAM usage (should never be used)");
@@ -345,9 +341,9 @@ BOOL InitConfiguration(void)
     ConfigSetDefaultBool(l_ConfigVideoRice, "DumpTexturesToFiles", FALSE, "Enable texture dumping");
     ConfigSetDefaultBool(l_ConfigVideoRice, "ShowFPS", TRUE, "Display On-screen FPS");
 
-    ConfigSetDefaultInt(l_ConfigVideoRice, "Mipmapping", 2, "Use Mipmapping? 0=no, 1=nearest, 2=bilinear, 3=trilinear");
+    ConfigSetDefaultInt(l_ConfigVideoRice, "Mipmapping", 0, "Use Mipmapping? 0=no, 1=nearest, 2=bilinear, 3=trilinear");
     ConfigSetDefaultInt(l_ConfigVideoRice, "FogMethod", 0, "Enable, Disable or Force fog generation (0=Disable, 1=Enable n64 choose, 2=Force Fog)");
-    ConfigSetDefaultInt(l_ConfigVideoRice, "ForceTextureFilter", 0, "Force to use texture filtering or not (0=auto: n64 choose, 1=force no filtering, 2=force filtering)");
+    ConfigSetDefaultInt(l_ConfigVideoRice, "ForceTextureFilter", 1, "Force to use texture filtering or not (0=auto: n64 choose, 1=force no filtering, 2=force filtering)");
     ConfigSetDefaultInt(l_ConfigVideoRice, "TextureEnhancement", 0, "Primary texture enhancement filter (0=None, 1=2X, 2=2XSAI, 3=HQ2X, 4=LQ2X, 5=HQ4X, 6=Sharpen, 7=Sharpen More, 8=External, 9=Mirrored)");
     ConfigSetDefaultInt(l_ConfigVideoRice, "TextureEnhancementControl", 0, "Secondary texture enhancement filter (0 = none, 1-4 = filtered)");
     ConfigSetDefaultInt(l_ConfigVideoRice, "TextureQuality", TXT_QUALITY_DEFAULT, "Color bit depth to use for textures (0=default, 1=32 bits, 2=16 bits)");
