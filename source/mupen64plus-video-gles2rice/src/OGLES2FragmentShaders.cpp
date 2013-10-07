@@ -22,6 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "OGLGraphicsContext.h"
 #include "OGLTexture.h"
 
+#include "Profiler.h"
+
 #define ALPHA_TEST "    if(gl_FragColor.a < AlphaRef) discard;                        \n"
 //#define ALPHA_TEST
 
@@ -234,7 +236,7 @@ COGL_FragmentProgramCombiner::COGL_FragmentProgramCombiner(CRender *pRender)
     OPENGL_CHECK_ERRORS;
 
     glLinkProgram(copyProgram);
-    copyAlphaLocation = glGetUniformLocation(copyProgram,"AlphaRef");
+	copyAlphaLocation = glGetUniformLocation(copyProgram,"AlphaRef");
     glGetProgramiv(copyProgram,GL_LINK_STATUS,&success);
     if(!success)
     {
@@ -266,7 +268,6 @@ COGL_FragmentProgramCombiner::COGL_FragmentProgramCombiner(CRender *pRender)
     OPENGL_CHECK_ERRORS;
 
     glLinkProgram(fillProgram);
-
 
     fillColorLocation = glGetUniformLocation(fillProgram,"uColor");
 

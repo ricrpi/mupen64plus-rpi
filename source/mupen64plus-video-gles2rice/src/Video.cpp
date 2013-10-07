@@ -43,6 +43,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "Video.h"
 #include "version.h"
 
+#include "Profiler.h"
+
 //=======================================================
 // local variables
 
@@ -275,11 +277,14 @@ static void ProcessDListStep2(void)
 {
     g_CritialSection.Lock();
     if( status.toShowCFB )
-    {
+    {	
+		Profile_start("CRender::GetRender()->DrawFrameBuffer(true)");
         CRender::GetRender()->DrawFrameBuffer(true);
         status.toShowCFB = false;
+		Profile_end();
     }
 
+	Profile_start("DLParser_Process((OSTask *)(g_GraphicsInfo.DMEM + 0x0FC0)");
     try
     {
         DLParser_Process((OSTask *)(g_GraphicsInfo.DMEM + 0x0FC0));
@@ -290,7 +295,7 @@ static void ProcessDListStep2(void)
         TriggerDPInterrupt();
         TriggerSPInterrupt();
     }
-
+	Profile_end();
     g_CritialSection.Unlock();
 }   
 
@@ -663,6 +668,8 @@ EXPORT m64p_error CALL PluginShutdown(void)
     if( status.bGameIsRunning )
     {
         RomClosed();
+		Profile_close();
+		
     }
     if (bIniIsChanged)
     {
@@ -759,7 +766,8 @@ EXPORT int CALL RomOpen(void)
 //---------------------------------------------------------------------------------------
 EXPORT void CALL UpdateScreen(void)
 {
-    if(options.bShowFPS)
+	Profile_start("UpdateScreen");
+	if(options.bShowFPS)
     {
         static unsigned int lastTick=0;
         static int frames=0;
@@ -770,31 +778,36 @@ EXPORT void CALL UpdateScreen(void)
             char caption[200];
             sprintf(caption, "%s v%i.%i.%i - %.3f VI/S", PLUGIN_NAME, VERSION_PRINTF_SPLIT(PLUGIN_VERSION), frames/5.0);
             DebugMessage(M64MSG_INFO, "%s", caption);
-	CoreVideo_SetCaption(caption);
+			CoreVideo_SetCaption(caption);
             frames = 0;
             lastTick = nowTick;
         }
     }
-    UpdateScreenStep2();
+	UpdateScreenStep2();
+	Profile_end();
 }
 
 //---------------------------------------------------------------------------------------
 
 EXPORT void CALL ViStatusChanged(void)
 {
+	Profile_start("ViStatusChanged");
     g_CritialSection.Lock();
     SetVIScales();
     CRender::g_pRender->UpdateClipRectangle();
     g_CritialSection.Unlock();
+	Profile_end();
 }
 
 //---------------------------------------------------------------------------------------
 EXPORT void CALL ViWidthChanged(void)
 {
+	Profile_start("ViWidthChanged");
     g_CritialSection.Lock();
     SetVIScales();
     CRender::g_pRender->UpdateClipRectangle();
     g_CritialSection.Unlock();
+	Profile_end();
 }
 
 EXPORT int CALL InitiateGFX(GFX_INFO Gfx_Info)
@@ -836,6 +849,7 @@ EXPORT void CALL ResizeVideoOutput(int width, int height)
 
 EXPORT void CALL ProcessRDPList(void)
 {
+	Profile_start("ProcessRDPList");
     try
     {
         RDP_DLParser_Process();
@@ -846,11 +860,14 @@ EXPORT void CALL ProcessRDPList(void)
         TriggerDPInterrupt();
         TriggerSPInterrupt();
     }
+	Profile_end();
 }   
 
 EXPORT void CALL ProcessDList(void)
 {
+	Profile_start("ProcessDList");
     ProcessDListStep2();
+	Profile_end();
 }   
 
 //---------------------------------------------------------------------------------------
@@ -876,7 +893,9 @@ EXPORT void CALL ProcessDList(void)
 
 EXPORT void CALL FBRead(uint32 addr)
 {
+	Profile_start("FBRead");
     g_pFrameBufferManager->FrameBufferReadByCPU(addr);
+	Profile_end();
 }
 
 
@@ -896,7 +915,9 @@ EXPORT void CALL FBRead(uint32 addr)
 
 EXPORT void CALL FBWrite(uint32 addr, uint32 size)
 {
+	Profile_start("FBWrite");
     g_pFrameBufferManager->FrameBufferWriteByCPU(addr, size);
+	Profile_end();
 }
 
 /************************************************************************
@@ -923,6 +944,7 @@ output:   Values are return in the FrameBufferInfo structure
 
 EXPORT void CALL FBGetFrameBufferInfo(void *p)
 {
+	Profile_start("FBGetFrameBufferInfo");
     FrameBufferInfo * pinfo = (FrameBufferInfo *)p;
     memset(pinfo,0,sizeof(FrameBufferInfo)*6);
 
@@ -955,6 +977,7 @@ EXPORT void CALL FBGetFrameBufferInfo(void *p)
         pinfo[5].size = 2;
         TXTRBUF_DETAIL_DUMP(TRACE3("Protect 0x%08X (%d,%d)", pinfo[5].addr, pinfo[5].width, pinfo[5].height));
     }
+	Profile_end();
 }
 
 // Plugin spec 1.3 functions

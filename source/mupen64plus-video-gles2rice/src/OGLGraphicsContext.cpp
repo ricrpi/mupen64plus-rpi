@@ -28,6 +28,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include <GLES2/gl2.h>
 
+#include "Profiler.h"
+
 #include "OGLDebug.h"
 #include "OGLGraphicsContext.h"
 #include "TextureManager.h"
@@ -411,8 +413,8 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
 {
     status.gFrameCount++;
 
-    glFlush();
-    OPENGL_CHECK_ERRORS;
+    //glFlush();			//Not required - done during GLSwapBuffers()
+    //OPENGL_CHECK_ERRORS;
 
     //wglSwapIntervalEXT(0);
 
@@ -465,8 +467,14 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
    if(renderCallback)
        (*renderCallback)(status.bScreenIsDrawn);
 
-   if (status.bScreenIsDrawn) CoreVideo_GL_SwapBuffers();
-   
+
+
+   if (status.bScreenIsDrawn)
+	{ 
+		Profile_start("CoreVideo_GL_SwapBuffers()");		
+		CoreVideo_GL_SwapBuffers();
+		Profile_end();
+ 	}  
    /*if(options.bShowFPS)
      {
     static unsigned int lastTick=0;
@@ -482,19 +490,26 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
          lastTick = nowTick;
       }
      }*/
+Profile_start("glEnable(GL_DEPTH_TEST)");	
     glEnable(GL_DEPTH_TEST);
 	OPENGL_CHECK_ERRORS;
+Profile_end();	
 
-    OPENGL_CHECK_ERRORS;
+	Profile_start("glDepthMask(GL_TRUE)");
 	glDepthMask(GL_TRUE);
     OPENGL_CHECK_ERRORS;
+	Profile_end();
 
+Profile_start("glClearDepth(1.0f)");
     glClearDepth(1.0f);
 	OPENGL_CHECK_ERRORS;	
-	
+	Profile_end();
+
+Profile_start("glClear()");
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     OPENGL_CHECK_ERRORS;
-    
+    Profile_end();
+
 	if( !g_curRomInfo.bForceScreenClear )
     {
         //glClear(GL_DEPTH_BUFFER_BIT);

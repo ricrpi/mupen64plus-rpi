@@ -252,6 +252,26 @@ __asm l3:                               \
    { vec.x = temp.x/norm; vec.y = temp.y/norm; vec.z = temp.z/norm; }
 #endif
 
+/*#define Vec3TransformNormal(vec, m) \
+   VECTOR3 temp; \
+   temp.x = (vec.x * m._11) + (vec.y * m._21) + (vec.z * m._31); \
+   temp.y = (vec.x * m._12) + (vec.y * m._22) + (vec.z * m._32); \
+   temp.z = (vec.x * m._13) + (vec.y * m._23) + (vec.z * m._33); \
+	union u {   \
+		float f;\
+		long l; \
+	};          \
+	u t;        \
+	float x = temp.x*temp.x+temp.y*temp.y+temp.z*temp.z; \
+	float x2 = (float)x * 0.5F; \
+	t.f  = (float)x; \
+	t.l  = 0x5f375a86 - ( t.l >> 1 );\
+	t.f  = t.f * ( 1.5F - ( x2 * t.f * t.f ) );	\
+   float norm = x * t.f; \
+   if (norm == 0.0) { vec.x = 0.0; vec.y = 0.0; vec.z = 0.0;} else \
+   { vec.x = temp.x/norm; vec.y = temp.y/norm; vec.z = temp.z/norm; }
+#endif
+*/
 
 #if !defined(__GNUC__) && !defined(NO_ASM)
 __declspec( naked ) void  __fastcall SSEVec3Transform(int i)

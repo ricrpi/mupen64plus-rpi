@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "DeviceBuilder.h"
 #include "FrameBuffer.h"
 #include "Render.h"
+#include "Profiler.h"
 
 #include "liblinux/BMGLibPNG.h"
 
@@ -548,9 +549,11 @@ bool CRender::TexRect(int nX0, int nY0, int nX1, int nY1, float fS0, float fT0, 
 
     if( status.bVIOriginIsUpdated == true && currentRomOptions.screenUpdateSetting==SCREEN_UPDATE_AT_1ST_PRIMITIVE )
     {
+		Profile_start("CGraphicsContext::Get()->UpdateFrame()");
         status.bVIOriginIsUpdated=false;
         CGraphicsContext::Get()->UpdateFrame();
         DEBUGGER_PAUSE_AND_DUMP_NO_UPDATE(NEXT_SET_CIMG,{DebuggerAppendMsg("Screen Update at 1st textRect");});
+		Profile_end();
     }
 
     if( options.enableHackForGames == HACK_FOR_BANJO_TOOIE )
@@ -573,8 +576,9 @@ bool CRender::TexRect(int nX0, int nY0, int nX1, int nY1, float fS0, float fT0, 
             return true;
         }
     }
-
+	Profile_start("CGraphicsContext::Get()->UpdateFrame()");
     PrepareTextures();
+	Profile_end();
 
     if( status.bHandleN64RenderTexture && g_pRenderTextureInfo->CI_Info.dwSize == TXT_SIZE_8b ) 
     {
@@ -583,7 +587,9 @@ bool CRender::TexRect(int nX0, int nY0, int nX1, int nY1, float fS0, float fT0, 
 
     if( !IsTextureEnabled() &&  gRDP.otherMode.cycle_type  != CYCLE_TYPE_COPY )
     {
-        FillRect(nX0, nY0, nX1, nY1, gRDP.primitiveColor);
+        Profile_start("FillRect() 590");   
+		FillRect(nX0, nY0, nX1, nY1, gRDP.primitiveColor);
+		Profile_end();
         return true;
     }
 
@@ -622,13 +628,15 @@ bool CRender::TexRect(int nX0, int nY0, int nX1, int nY1, float fS0, float fT0, 
 
     // Scale to Actual texture coords
     // The two cases are to handle the oversized textures hack on voodoos
-
+ 	Profile_start("SetCombinerAndBlender()");   
     SetCombinerAndBlender();
-    
+    Profile_end();   
 
     if( gRDP.otherMode.cycle_type  >= CYCLE_TYPE_COPY || !gRDP.otherMode.z_cmp )
     {
+		Profile_start("ZBufferEnable(FALSE)");   
         ZBufferEnable(FALSE);
+		Profile_end();
     }
 
     BOOL accurate = currentRomOptions.bAccurateTextureMapping;
@@ -792,28 +800,48 @@ bool CRender::TexRect(int nX0, int nY0, int nX1, int nY1, float fS0, float fT0, 
     TurnFogOnOff(false);
     if( TileUFlags[gRSP.curTile]==TEXTURE_UV_FLAG_CLAMP && TileVFlags[gRSP.curTile]==TEXTURE_UV_FLAG_CLAMP && options.forceTextureFilter == FORCE_DEFAULT_FILTER )
     {
+		Profile_start("ApplyTextureFilter() 803");
         TextureFilter dwFilter = m_dwMagFilter;
         m_dwMagFilter = m_dwMinFilter = FILTER_LINEAR;
         ApplyTextureFilter();
+		Profile_end();
+		Profile_start("ApplyRDPScissor() 808");
         ApplyRDPScissor();
+		Profile_end();
+		Profile_start("RenderTexRect() 811");
         res = RenderTexRect();
+		Profile_end();
+		Profile_start("ApplyTextureFilter() 814");
         m_dwMagFilter = m_dwMinFilter = dwFilter;
         ApplyTextureFilter();
+		Profile_end();
     }
     else if( fScaleS >= 1 && fScaleT >= 1 && options.forceTextureFilter == FORCE_DEFAULT_FILTER )
     {
-        TextureFilter dwFilter = m_dwMagFilter;
+        Profile_start("ApplyTextureFilter() 82");
+		TextureFilter dwFilter = m_dwMagFilter;
         m_dwMagFilter = m_dwMinFilter = FILTER_POINT;
         ApplyTextureFilter();
-        ApplyRDPScissor();
+        Profile_end();
+		Profile_start("ApplyRDPScissor() 826");
+		ApplyRDPScissor();
+		Profile_end();
+		Profile_start("RenderTexRect() 829");
         res = RenderTexRect();
+		Profile_end();
+		Profile_start("ApplyTextureFilter() 832");
         m_dwMagFilter = m_dwMinFilter = dwFilter;
         ApplyTextureFilter();
+		Profile_end();
     }
     else
     {
+		Profile_start("ApplyRDPScissor(0 839");
         ApplyRDPScissor();
+		Profile_end();
+		Profile_start("RenderTexRect() 842");
         res = RenderTexRect();
+		Profile_end();
     }
     TurnFogOnOff(gRSP.bFogEnabled);
 

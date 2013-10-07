@@ -281,10 +281,10 @@ LINK.o = $(Q_LD)$(CXX) $(CXXFLAGS) $(LDFLAGS) $(TARGET_ARCH)
 # set special flags for given Makefile parameters
 ifeq ($(DEBUG),1)
   #CFLAGS += -g
-CFLAGS += -DOPENGL_DEBUG
+	CFLAGS+= -DOPENGL_DEBUG -DTIME_PROFILE
   INSTALL_STRIP_FLAG ?= 
 else
-  CFLAGS += -O3
+  CFLAGS += -O3 #-DTIME_PROFILE
   ifneq ($(OS),OSX)
     INSTALL_STRIP_FLAG ?= -s
   endif
@@ -355,9 +355,9 @@ SOURCE = \
 	$(SRCDIR)/TextureFilters_hq4x.cpp \
 	$(SRCDIR)/TextureManager.cpp \
 	$(SRCDIR)/VectorMath.cpp \
-	$(SRCDIR)/Video.cpp
+	$(SRCDIR)/Video.cpp \
+	$(SRCDIR)/Profiler.c
 	
-
 ifeq ($(OS),MINGW)
 SOURCE += \
 	$(SRCDIR)/osal_dynamiclib_win32.c \

@@ -28,6 +28,10 @@ extern "C" { extern int SDL_GetTicks(void); }
 #include "ucode.h"
 #include <time.h>
 
+#include "Profiler.h"
+
+#define TEXTURE_TTL (50)	// Purge Textures after X ms TODO Optimize?
+
 //////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////
 //                    uCode Config                      //
@@ -790,12 +794,15 @@ void DLParser_Process(OSTask * pTask)
 
     if ( CRender::g_pRender == NULL)
     {
+		Profile_start("DLParser_Process - TriggerDPInterrupt");
         TriggerDPInterrupt();
         TriggerSPInterrupt();
+		Profile_end();
         return;
     }
 
-    if( options.bSkipFrame )
+    status.bScreenIsDrawn = true;
+	if( options.bSkipFrame )
     {
         skipframe++;
         if(skipframe%2)
@@ -806,7 +813,7 @@ void DLParser_Process(OSTask * pTask)
         }
     }
 
-	status.bScreenIsDrawn = true;
+	
     
     if( currentRomOptions.N64RenderToTextureEmuType != TXT_BUF_NONE && defaultRomOptions.bSaveVRAM )
     {
@@ -836,11 +843,13 @@ void DLParser_Process(OSTask * pTask)
             {DebuggerAppendMsg("Start Task without DLIST: ucode=%08X, data=%08X", (uint32)pTask->t.ucode, (uint32)pTask->t.ucode_data);});
 
 
-    // Check if we need to purge (every 5 milliseconds)
-    if (status.gRDPTime - status.lastPurgeTimeTime > 5)
+    // Check if we need to purge (every TEXTURE_TTL milliseconds)
+    if (status.gRDPTime - status.lastPurgeTimeTime > TEXTURE_TTL)
     {
+		Profile_start("Purge Textures");
         gTextureManager.PurgeOldTextures();
         status.lastPurgeTimeTime = status.gRDPTime;
+		Profile_end();
     }
 
     status.dwNumDListsCulled = 0;
@@ -851,17 +860,26 @@ void DLParser_Process(OSTask * pTask)
 
     if( g_curRomInfo.bForceScreenClear && CGraphicsContext::needCleanScene )
     {
+		Profile_start("CRender::g_pRender->ClearBuffer(true,true)");
         CRender::g_pRender->ClearBuffer(true,true);
         CGraphicsContext::needCleanScene = false;
+		Profile_end();
     }
-
+	
+	Profile_start("SetVIScales()");
     SetVIScales();
+	Profile_end();
+	
+	Profile_start("CRender::g_pRender->RenderReset()...");
     CRender::g_pRender->RenderReset();
     CRender::g_pRender->BeginRendering();
     CRender::g_pRender->SetViewport(0, 0, windowSetting.uViWidth, windowSetting.uViHeight, 0x3FF);
     CRender::g_pRender->SetFillMode(options.bWinFrameMode? RICE_FILLMODE_WINFRAME : RICE_FILLMODE_SOLID);
+	Profile_end();
 
-    try
+	Profile_start("The main loop");
+        
+	try
     {
         // The main loop
         while( gDlistStackPointer >= 0 )
@@ -889,9 +907,12 @@ void DLParser_Process(OSTask * pTask)
                 gDlistStack[gDlistStackPointer].pc, pgfx->words.w0, pgfx->words.w1, (gRSP.ucode!=5&&gRSP.ucode!=10)?ucodeNames_GBI1[(pgfx->words.w0>>24)]:ucodeNames_GBI2[(pgfx->words.w0>>24)]);
 #endif
             gDlistStack[gDlistStackPointer].pc += 8;
-            currentUcodeMap[pgfx->words.w0 >>24](pgfx);
 
-            if ( gDlistStackPointer >= 0 && --gDlistStack[gDlistStackPointer].countdown < 0 )
+			//Profile_start("currentUcodeMap[]");            
+			currentUcodeMap[pgfx->words.w0 >>24](pgfx);
+			//Profile_end2((pgfx->words.w0 >>24), gDlistStackPointer);
+            
+			if ( gDlistStackPointer >= 0 && --gDlistStack[gDlistStackPointer].countdown < 0 )
             {
                 LOG_UCODE("**EndDLInMem");
                 gDlistStackPointer--;
@@ -904,7 +925,7 @@ void DLParser_Process(OSTask * pTask)
         TRACE0("Unknown exception happens in ProcessDList");
         TriggerDPInterrupt();
     }
-
+	Profile_end();
     CRender::g_pRender->EndRendering();
 
     if( gRSP.ucode >= 17)
@@ -1640,8 +1661,8 @@ void RDP_DLParser_Process(void)
     gDlistStack[gDlistStackPointer].pc = start;
     gDlistStack[gDlistStackPointer].countdown = MAX_DL_COUNT;
 
-    // Check if we need to purge (every 5 milliseconds)
-    if (status.gRDPTime - status.lastPurgeTimeTime > 5)
+    // Check if we need to purge (every TEXTURE_TTL milliseconds)
+    if (status.gRDPTime - status.lastPurgeTimeTime > TEXTURE_TTL)
     {
         gTextureManager.PurgeOldTextures();
         status.lastPurgeTimeTime = status.gRDPTime;
