@@ -57,6 +57,9 @@
 #include "r4300/interupt.h"
 #include "r4300/reset.h"
 
+#include <sched.h>
+#include <errno.h>
+
 #ifdef DBG
 #include "debugger/dbg_types.h"
 #include "debugger/debugger.h"
@@ -194,8 +197,9 @@ int main_set_core_defaults(void)
     ConfigSetDefaultString(g_CoreConfig, "SaveStatePath", "", "Path to directory where emulator save states (snapshots) are saved. If this is blank, the default value of ${UserConfigPath}/save will be used");
     ConfigSetDefaultString(g_CoreConfig, "SaveSRAMPath", "", "Path to directory where SRAM/EEPROM data (in-game saves) are stored. If this is blank, the default value of ${UserConfigPath}/save will be used");
     ConfigSetDefaultString(g_CoreConfig, "SharedDataPath", "", "Path to a directory to search when looking for shared data files");
-
-    /* handle upgrades */
+	ConfigSetDefaultInt(g_CoreConfig, "Scheduler", 10, "Scheduling policy. 0 for Standard (SCHED_OTHER), 1-99 RealTime FIFO policy with Priority of [N]");
+    
+	/* handle upgrades */
     if (bUpgrade)
     {
         if (fConfigParamsVersion < 1.01f)
@@ -709,7 +713,7 @@ void new_vi(void)
         if (time > 0 && l_MainSpeedLimit)
         {
             DebugMessage(M64MSG_VERBOSE, "    new_vi(): Waiting %ims", time);
-            SDL_Delay(time);
+            //SDL_Delay(time);
         }
         CurrentFPSTime = CurrentFPSTime + time;
     }
@@ -731,6 +735,41 @@ m64p_error main_run(void)
 {
     /* take the r4300 emulator mode from the config file at this point and cache it in a global variable */
     r4300emu = ConfigGetParamInt(g_CoreConfig, "R4300Emulator");
+	uint32_t SchedulerPriority = ConfigGetParamInt(g_CoreConfig, "Scheduler");
+	
+	if (SchedulerPriority > 0)
+	{
+		if (SchedulerPriority > sched_get_priority_max(SCHED_FIFO)) SchedulerPriority = 20;
+
+		struct sched_param sp;	
+		sp.sched_priority = SchedulerPriority;
+
+		if (!sched_setscheduler(0, SCHED_FIFO, &sp) )
+		{
+			DebugMessage(M64MSG_VERBOSE, "Running as SCHED_FIFO, priority %d", SchedulerPriority);
+		}
+		else
+		{
+			int e = errno;
+			
+			switch (e)
+			{
+			case EINVAL:
+				DebugMessage(M64MSG_WARNING, "Could not run as SCHED_FIFO, priority %d, error EINVAL", SchedulerPriority);
+				break;
+			case EPERM:
+				DebugMessage(M64MSG_WARNING, "Could not run as SCHED_FIFO, priority %d, error EPERM", SchedulerPriority);
+				break;
+			case ESRCH:
+				DebugMessage(M64MSG_WARNING, "Could not run as SCHED_FIFO, priority %d, error ESRCH", SchedulerPriority);
+				break;
+			default:
+				DebugMessage(M64MSG_WARNING, "Could not run as SCHED_FIFO, priority %d, error %d", SchedulerPriority, e);
+			}
+		}
+		
+		
+	}
 
     /* set some other core parameters based on the config file values */
     savestates_set_autoinc_slot(ConfigGetParamBool(g_CoreConfig, "AutoStateSlotIncrement"));

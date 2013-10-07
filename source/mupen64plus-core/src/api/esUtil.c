@@ -152,15 +152,15 @@ static EGLBoolean CreateEGLContext ( EGLNativeWindowType hWnd, EGLDisplay* eglDi
 //
 EGLBoolean WinCreate(ESContext *esContext, const char *title) 
 {
-   int32_t success = 0;
+   	int32_t success = 0;
 
-   static EGL_DISPMANX_WINDOW_T nativewindow;
+   	static EGL_DISPMANX_WINDOW_T nativewindow;
 
-   DISPMANX_ELEMENT_HANDLE_T dispman_element;
-   DISPMANX_DISPLAY_HANDLE_T dispman_display;
-   DISPMANX_UPDATE_HANDLE_T dispman_update;
-   VC_RECT_T dst_rect;
-   VC_RECT_T src_rect;
+   	DISPMANX_ELEMENT_HANDLE_T dispman_element;
+   	DISPMANX_DISPLAY_HANDLE_T dispman_display;
+   	DISPMANX_UPDATE_HANDLE_T dispman_update;
+   	VC_RECT_T dst_rect;
+   	VC_RECT_T src_rect;
    
 	VC_DISPMANX_ALPHA_T dispman_alpha = {
 		DISPMANX_FLAGS_ALPHA_FIXED_ALL_PIXELS,
@@ -168,21 +168,24 @@ EGLBoolean WinCreate(ESContext *esContext, const char *title)
 		0 /* mask resource handle */
 	};
 
-   uint32_t display_width;
-   uint32_t display_height;
+   	uint32_t display_width;
+   	uint32_t display_height;
 
-   // create an EGL window surface, passing context width/height
-   success = graphics_get_display_size(0 /* LCD */, &display_width, &display_height);
-   if ( success < 0 )
-   {
-	DebugMessage(M64MSG_ERROR, "graphics_get_display_size failed");
-      return M64ERR_SYSTEM_FAIL;
-   }
-   DebugMessage(M64MSG_VERBOSE, "Screen resolution is: %dx%d", display_width, display_height);
+   	// create an EGL window surface, passing context width/height
+   	success = graphics_get_display_size(0 /* LCD */, &display_width, &display_height);
+   	if ( success < 0 )
+   	{
+		DebugMessage(M64MSG_ERROR, "graphics_get_display_size failed");
+      	return M64ERR_SYSTEM_FAIL;
+   	}
+   	DebugMessage(M64MSG_VERBOSE, "Screen resolution is: %dx%d", display_width, display_height);
    
     display_width = esContext->width;
-   display_height = esContext->height;
+   	display_height = esContext->height;
 
+	DebugMessage(M64MSG_VERBOSE, "Window size is: %dx%d", display_width, display_height);
+
+   
    dst_rect.x = 0;
    dst_rect.y = 0;
    dst_rect.width = display_width;

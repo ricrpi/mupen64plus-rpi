@@ -28,6 +28,7 @@
 
 static long long int time_in_section[5];
 static long long int last_start[5];
+static long long int call_count[5];
 
 #if defined(WIN32) && !defined(__MINGW32__)
   // timing
@@ -64,6 +65,7 @@ static long long int last_start[5];
 void start_section(int section_type)
 {
    last_start[section_type] = get_time();
+	call_count[section_type]++;
 }
 
 void end_section(int section_type)
@@ -88,10 +90,22 @@ void refresh_stat()
          time_to_nsec(time_in_section[AUDIO_SECTION]),
          time_to_nsec(time_in_section[COMPILER_SECTION]),
          time_to_nsec(time_in_section[IDLE_SECTION]));
-      time_in_section[GFX_SECTION] = 0;
+		DebugMessage(M64MSG_INFO, "gfx=%lli - audio=%lli - compiler %lli - idle=%lli",
+         call_count[GFX_SECTION],
+         call_count[AUDIO_SECTION],
+         call_count[COMPILER_SECTION],
+         call_count[IDLE_SECTION]);  
+    
+	time_in_section[GFX_SECTION] = 0;
       time_in_section[AUDIO_SECTION] = 0;
       time_in_section[COMPILER_SECTION] = 0;
       time_in_section[IDLE_SECTION] = 0;
+
+	call_count[GFX_SECTION] = 0;
+	call_count[AUDIO_SECTION] = 0;
+	call_count[COMPILER_SECTION] = 0;
+	call_count[IDLE_SECTION] = 0;
+
       last_start[ALL_SECTION] = curr_time;
    }
 }

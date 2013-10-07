@@ -386,6 +386,7 @@ SOURCE = \
 	$(SRCDIR)/api/frontend.c \
 	$(SRCDIR)/api/vidext.c \
 	$(SRCDIR)/api/esUtil.c \
+	$(SRCDIR)/api/rpiGLES.c \
 	$(SRCDIR)/main/main.c \
 	$(SRCDIR)/main/util.c \
 	$(SRCDIR)/main/cheat.c \
@@ -413,6 +414,7 @@ SOURCE = \
 	$(SRCDIR)/r4300/recomp.c \
 	$(SRCDIR)/r4300/reset.c \
 	$(SRCDIR)/osd/screenshot.cpp
+	
 ifeq ("$(OS)","MINGW")
 SOURCE += \
 	$(SRCDIR)/osal/dynamiclib_win32.c \

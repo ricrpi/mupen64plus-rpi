@@ -47,7 +47,7 @@
 #include "main/lirc.h"
 #endif
 
-
+extern uint32_t SDL_GetTicks();
 
 #define QUEUE_SIZE	64
 
@@ -72,7 +72,7 @@ static interupt_queue *qstack[QUEUE_SIZE];
 static unsigned int qstackindex = 0;
 static interupt_queue *qbase = NULL;
 
-static interupt_queue* queue_malloc(size_t Bytes)	//Throw away Bytes arg
+static interupt_queue* queue_malloc(size_t Bytes)
 {
 	if (qstackindex >= QUEUE_SIZE - 1) // should never happen
 	{
@@ -397,6 +397,18 @@ void check_interupt(void)
 
 void gen_interupt(void)
 {
+	/*static int count=0, time=0;
+	count++;	
+
+	if (count >= 500)
+	{
+		double f = (500.0)/(SDL_GetTicks() - time);
+		DebugMessage(M64MSG_INFO, "gen_interrupt: %.3fKHz", f);
+		
+		count = 0;
+		time = SDL_GetTicks();
+	}*/
+
     if (stop == 1)
     {
         vi_counter = 0; // debug
