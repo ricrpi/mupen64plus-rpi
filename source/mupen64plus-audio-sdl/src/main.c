@@ -633,7 +633,7 @@ static uint32_t SendBufferToAudio(int32_t *pCurrentBuffer)
 	}
 	else if (latency == 0)
 	{
-		DebugMessage(M64MSG_VERBOSE, "Audio Buffer under run(%d)", uiUnderRunCount);
+		DebugMessage(M64MSG_WARNING, "Audio Buffer under run(%d)", uiUnderRunCount);
 		uiUnderRunCount++;
 	}
 
