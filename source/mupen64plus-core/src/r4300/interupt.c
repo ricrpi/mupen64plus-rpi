@@ -27,6 +27,7 @@
 #include "api/m64p_types.h"
 #include "api/callbacks.h"
 #include "api/m64p_vidext.h"
+#include "api/rpiGLES.h"
 #include "api/vidext.h"
 #include "memory/memory.h"
 #include "main/rom.h"
@@ -42,6 +43,7 @@
 #include "exception.h"
 #include "reset.h"
 #include "new_dynarec/new_dynarec.h"
+
 
 #ifdef WITH_LIRC
 #include "main/lirc.h"
@@ -470,6 +472,28 @@ void gen_interupt(void)
             lircCheckInput();
 #endif
             SDL_PumpEvents();
+            
+            XEvent  xev;
+		while (RPI_NextXEvent(&xev) )
+		{   // check for events from the x-server
+			switch (xev.type)
+			{	
+				case MotionNotify:   // if mouse has moved
+            				//cout << "move to:" << xev.xmotion.x << "," << xev.xmotion.y << endl;
+            				
+					break;         
+				case ButtonPress:
+					//cout << "Button Press: " << xev.xbutton.state << ", " << xev.xbutton.button << endl;
+					break;
+				case KeyPress:
+					//cout << "Key Press: " << xev.xkey.keycode << endl;		
+				default: 
+					break;
+			}
+      		}
+            
+            
+            
 
             refresh_stat();
 
