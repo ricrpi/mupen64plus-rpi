@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #define RICE_MATRIX_STACK   60
 #define MAX_TEXTURES         8
+#define NO_ASM
 
 enum FillMode
 {

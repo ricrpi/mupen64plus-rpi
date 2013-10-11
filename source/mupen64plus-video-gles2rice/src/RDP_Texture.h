@@ -25,6 +25,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "Render.h"
 #include "Profiler.h"
 
+#define NO_ASM
+
 uint32 g_TmemFlag[16];
 void SetTmemFlag(uint32 tmemAddr, uint32 size);
 bool IsTmemFlagValid(uint32 tmemAddr);
@@ -429,6 +431,13 @@ inline uint32 swapdword( uint32 value )
                :
                );
    return value;
+#elif !defined(NO_ASM)
+ 	asm volatile("rev %0, %0" 
+				: "+r"(value)
+				: 
+				: 
+				);
+	return value;
 #else
   return ((value & 0xff000000) >> 24) |
          ((value & 0x00ff0000) >>  8) |
@@ -453,11 +462,12 @@ inline uint16 swapword( uint16 value )
                );
   return value;
 #elif !defined(NO_ASM)
- 	asm volatile("ror %0, #16" 
-				: "+a"(value)
+ 	asm volatile("rev16 %0, %0" 
+				: "+r"(value)
 				: 
 				: 
 				);
+	return value;
 #else
 
   return ((value & 0xff00) >> 8) |

@@ -36,6 +36,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "Video.h"
 #include "version.h"
 
+#include "OGLstate.h"
 #ifdef PAULSCODE
 #include "ae_bridge.h"
 #endif
@@ -269,7 +270,7 @@ void COGLGraphicsContext::InitState(void)
 
     glFrontFace(GL_CCW);
     OPENGL_CHECK_ERRORS;
-    glDisable(GL_CULL_FACE);
+    gl_Disable(GL_CULL_FACE);
     OPENGL_CHECK_ERRORS;
 #if SDL_VIDEO_OPENGL
     glDisable(GL_NORMALIZE);

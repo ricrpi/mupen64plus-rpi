@@ -18,13 +18,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "osal_opengl.h"
 
-
+#include "OGLstate.h"
 #include "OGLES2FragmentShaders.h"
 #include "OGLDebug.h"
 #include "OGLRender.h"
 #include "OGLGraphicsContext.h"
 #include "OGLTexture.h"
 #include "TextureManager.h"
+
+#include "Profiler.h"
 
 // FIXME: Use OGL internal L/T and matrix stack
 // FIXME: Use OGL lookupAt function
@@ -416,26 +418,26 @@ void OGLRender::SetCullMode(bool bCullFront, bool bCullBack)
     {
         glCullFace(GL_FRONT_AND_BACK);
         OPENGL_CHECK_ERRORS;
-        glEnable(GL_CULL_FACE);
+        gl_Enable(GL_CULL_FACE);
         OPENGL_CHECK_ERRORS;
     }
     else if( bCullFront )
     {
         glCullFace(GL_FRONT);
         OPENGL_CHECK_ERRORS;
-        glEnable(GL_CULL_FACE);
+        gl_Enable(GL_CULL_FACE);
         OPENGL_CHECK_ERRORS;
     }
     else if( bCullBack )
     {
         glCullFace(GL_BACK);
         OPENGL_CHECK_ERRORS;
-        glEnable(GL_CULL_FACE);
+        gl_Enable(GL_CULL_FACE);
         OPENGL_CHECK_ERRORS;
     }
     else
     {
-        glDisable(GL_CULL_FACE);
+        gl_Disable(GL_CULL_FACE);
         OPENGL_CHECK_ERRORS;
     }
 }
@@ -557,13 +559,16 @@ void OGLRender::SetTextureVFlag(TextureUVFlag dwFlag, uint32 dwTile)
 
 bool OGLRender::RenderTexRect()
 {
+Profile_start("OGLRender::RenderTexRect() glViewportWrapper");
     glViewportWrapper(0, windowSetting.statusBarHeightToUse, windowSetting.uDisplayWidth, windowSetting.uDisplayHeight);
     OPENGL_CHECK_ERRORS;
-
-    GLboolean cullface = glIsEnabled(GL_CULL_FACE);
+Profile_end();
+Profile_start("OGLRender::RenderTexRect() cullface");
+    GLboolean cullface = gl_IsEnabled(GL_CULL_FACE);
     glDisable(GL_CULL_FACE);
     OPENGL_CHECK_ERRORS;
-
+Profile_end();
+Profile_start("OGLRender::RenderTexRect() gen GLfloats");
     float depth = -(g_texRectTVtx[3].z*2-1);
 
 #if SDL_VIDEO_OPENGL
@@ -613,23 +618,27 @@ bool OGLRender::RenderTexRect()
             -inv + g_texRectTVtx[1].x / w, inv - g_texRectTVtx[1].y / h, depth, 1,
             -inv + g_texRectTVtx[0].x / w, inv - g_texRectTVtx[0].y / h, depth, 1
     };
-
+Profile_end();
+Profile_start("OGLRender::RenderTexRect() glVertexAttribPointer");
     glVertexAttribPointer(VS_COLOR, 4, GL_FLOAT,GL_TRUE, 0, &colour );
     glVertexAttribPointer(VS_POSITION,4,GL_FLOAT,GL_FALSE,0,&vertices);
     glVertexAttribPointer(VS_TEXCOORD0,2,GL_FLOAT,GL_FALSE, 0, &tex);
-    OPENGL_CHECK_ERRORS;
+Profile_end();
+Profile_start("OGLRender::RenderTexRect() glDrawArrays");    
+	OPENGL_CHECK_ERRORS;
     glDrawArrays(GL_TRIANGLE_FAN,0,4);
     OPENGL_CHECK_ERRORS;
-
+Profile_end();
+Profile_start("OGLRender::RenderTexRect() glVertexAttribPointer2"); 
     //Restore old pointers
     glVertexAttribPointer(VS_COLOR, 4, GL_UNSIGNED_BYTE,GL_TRUE, sizeof(uint8)*4, &(g_oglVtxColors[0][0]) );
     glVertexAttribPointer(VS_POSITION,4,GL_FLOAT,GL_FALSE,sizeof(float)*5,&(g_vtxProjected5[0][0]));
     glVertexAttribPointer(VS_TEXCOORD0,2,GL_FLOAT,GL_FALSE, sizeof( TLITVERTEX ), &(g_vtxBuffer[0].tcord[0].u));
-
+Profile_end();
 #endif
 
-    if( cullface ) glEnable(GL_CULL_FACE);
-    OPENGL_CHECK_ERRORS;
+    //if( cullface ) gl_Enable(GL_CULL_FACE);
+    //OPENGL_CHECK_ERRORS;
 
     return true;
 }
@@ -643,8 +652,8 @@ bool OGLRender::RenderFillRect(uint32 dwColor, float depth)
     glViewportWrapper(0, windowSetting.statusBarHeightToUse, windowSetting.uDisplayWidth, windowSetting.uDisplayHeight);
     OPENGL_CHECK_ERRORS;
 
-    GLboolean cullface = glIsEnabled(GL_CULL_FACE);
-    glDisable(GL_CULL_FACE);
+    GLboolean cullface = gl_IsEnabled(GL_CULL_FACE);
+    gl_Disable(GL_CULL_FACE);
     OPENGL_CHECK_ERRORS;
 
 #if SDL_VIDEO_OPENGL
@@ -689,8 +698,8 @@ bool OGLRender::RenderFillRect(uint32 dwColor, float depth)
 
 #endif
 
-    if( cullface ) glEnable(GL_CULL_FACE);
-    OPENGL_CHECK_ERRORS;
+    //if( cullface ) gl_Enable(GL_CULL_FACE);
+    //OPENGL_CHECK_ERRORS;
 
     return true;
 }
@@ -800,8 +809,8 @@ void OGLRender::DrawSimple2DTexture(float x0, float y0, float x1, float y1, floa
 
     StartDrawSimple2DTexture(x0, y0, x1, y1, u0, v0, u1, v1, dif, spe, z, rhw);
 
-    GLboolean cullface = glIsEnabled(GL_CULL_FACE);
-    glDisable(GL_CULL_FACE);
+    GLboolean cullface = gl_IsEnabled(GL_CULL_FACE);
+    gl_Disable(GL_CULL_FACE);
     OPENGL_CHECK_ERRORS;
 
     glViewportWrapper(0, windowSetting.statusBarHeightToUse, windowSetting.uDisplayWidth, windowSetting.uDisplayHeight);
@@ -886,16 +895,16 @@ void OGLRender::DrawSimple2DTexture(float x0, float y0, float x1, float y1, floa
 
 #endif
 
-    if( cullface ) glEnable(GL_CULL_FACE);
-    OPENGL_CHECK_ERRORS;
+    //if( cullface ) gl_Enable(GL_CULL_FACE);
+    //OPENGL_CHECK_ERRORS;
 }
 
 void OGLRender::DrawSimpleRect(int nX0, int nY0, int nX1, int nY1, uint32 dwColor, float depth, float rhw)
 {
     StartDrawSimpleRect(nX0, nY0, nX1, nY1, dwColor, depth, rhw);
 
-    GLboolean cullface = glIsEnabled(GL_CULL_FACE);
-    glDisable(GL_CULL_FACE);
+    GLboolean cullface = gl_IsEnabled(GL_CULL_FACE);
+    gl_Disable(GL_CULL_FACE);
     OPENGL_CHECK_ERRORS;
 
     float a = (dwColor>>24)/255.0f;
@@ -946,8 +955,8 @@ void OGLRender::DrawSimpleRect(int nX0, int nY0, int nX1, int nY1, uint32 dwColo
 
 #endif
 
-    if( cullface ) glEnable(GL_CULL_FACE);
-    OPENGL_CHECK_ERRORS;
+    //if( cullface ) gl_Enable(GL_CULL_FACE);
+    //OPENGL_CHECK_ERRORS;
 }
 
 void OGLRender::InitCombinerBlenderForSimpleRectDraw(uint32 tile)

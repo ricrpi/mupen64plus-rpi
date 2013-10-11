@@ -111,7 +111,6 @@ ifneq ("$(filter arm%,$(HOST_CPU))","")
     CPU := ARM
     ARCH_DETECTED := 32BITS
     PIC ?= 1
-    NO_ASM := 1
     $(warning Architecture "$(HOST_CPU)" not officially supported.')
   endif
 endif
@@ -128,7 +127,7 @@ LDFLAGS += $(SHARED)
 
 
 ifeq ("$(MACHINE)","armv6l")
-CFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
+CFLAGS += -DARM -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
 CXXFLAGS += -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
 LDLIBS += -lm -L/opt/vc/lib -lGLESv2 -lEGL -lbcm_host
 endif
@@ -342,6 +341,7 @@ SOURCE = \
 	$(SRCDIR)/OGLRender.cpp \
 	$(SRCDIR)/OGLRenderExt.cpp \
 	$(SRCDIR)/OGLTexture.cpp \
+	$(SRCDIR)/OGLstate.cpp \
 	$(SRCDIR)/Render.cpp \
 	$(SRCDIR)/RenderBase.cpp \
 	$(SRCDIR)/RenderExt.cpp \

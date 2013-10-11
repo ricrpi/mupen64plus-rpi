@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "osal_opengl.h"
 
 #include "OGLRender.h"
+#include "OGLstate.h"
 
 extern Matrix g_MtxReal;
 extern uObjMtxReal gObjMtxReal;
@@ -34,8 +35,8 @@ void OGLRender::DrawSpriteR_Render()    // With Rotation
 {
     glViewportWrapper(0, windowSetting.statusBarHeightToUse, windowSetting.uDisplayWidth, windowSetting.uDisplayHeight);
 
-    GLboolean cullface = glIsEnabled(GL_CULL_FACE);
-    glDisable(GL_CULL_FACE);
+    GLboolean cullface = gl_IsEnabled(GL_CULL_FACE);
+    gl_Disable(GL_CULL_FACE);
 
 #if SDL_VIDEO_OPENGL
 
@@ -111,7 +112,7 @@ void OGLRender::DrawSpriteR_Render()    // With Rotation
 
 #endif
 
-    if( cullface ) glEnable(GL_CULL_FACE);
+    //if( cullface ) gl_Enable(GL_CULL_FACE);
 }
 
 

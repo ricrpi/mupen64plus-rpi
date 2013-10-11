@@ -620,7 +620,6 @@ uint32 CalculateRDRAMCRC(void *pPhysicalAddress, uint32 left, uint32 top, uint32
             dwAsmHeight = height - 1;
             dwAsmPitch = pitchInBytes;
 			
-#undef NO_ASM
 #if defined(NO_ASM)
             uint32 pitch = pitchInBytes>>2;
             uint32* pStart = (uint32*)pPhysicalAddress;
@@ -646,7 +645,7 @@ uint32 CalculateRDRAMCRC(void *pPhysicalAddress, uint32 left, uint32 top, uint32
                 pAsmStart += dwAsmPitch;
                 y--;
             }
-#else //This is for ARM
+#elif defined(ARM)
             asm volatile(	".align                        \n"
 							"push {r1, r2, r3, r4, r5}     \n"
                 			"mov r3, %1                    \n" // = pAsmStart
