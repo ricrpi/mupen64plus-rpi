@@ -32,6 +32,7 @@
 #include "m64p_vidext.h"
 #include "rpiGLES.h"
 
+#include "r4300/r4300.h" 	// for global rompause
 #include "callbacks.h"
 #include "../osd/osd.h"
 
@@ -171,11 +172,18 @@ SDL_FULLSCREEN;
     return M64ERR_SUCCESS;
 }
 
+void PauseState(int value)
+{
+	rompause = value;
+}
+
 EXPORT m64p_error CALL VidExt_SetVideoMode(int Width, int Height, int BitsPerPixel, m64p_video_mode ScreenMode, m64p_video_flags Flags)
 {
 	RPI_OpenWindow("Mupen64plus", (unsigned int)Width, (unsigned int)Height, l_Fullscreen, 
 	PointerMotionMask | ButtonPressMask | ButtonReleaseMask |
 	KeyPressMask | KeyReleaseMask);
+	
+	RPI_SetPauseCallback(&PauseState);
 	
 	return M64ERR_SUCCESS;
 }

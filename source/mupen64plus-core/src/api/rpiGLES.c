@@ -45,8 +45,14 @@ static unsigned int bPaused=1;
 static unsigned int bFullScreened=0;
 static uint32_t uiXflags=0; 
 static unsigned int bUsingXwindow=0;
+static void (*PauseCallback)(int) = NULL;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
+
+void RPI_SetPauseCallback(void (*callback)(int))
+{
+	PauseCallback = callback;
+}
 
 void RPI_Pause(unsigned int bPause)
 {	
@@ -70,6 +76,8 @@ void RPI_Pause(unsigned int bPause)
 			0, 255, &dummy_rect, &src_rect, DISPMANX_PROTECTION_NONE,(DISPMANX_TRANSFORM_T)0 );
    
    		vc_dispmanx_update_submit_sync( dispman_update );
+   		
+   		if (NULL != PauseCallback) PauseCallback(bPause);
 	}
 	else if (!bPause && bPaused)
 	{
@@ -87,6 +95,7 @@ void RPI_Pause(unsigned int bPause)
 		{
 			RPI_FullScreen(0);
 		}
+		if (NULL != PauseCallback) PauseCallback(bPause);
 	}	
 	bPaused = bPause;
 }

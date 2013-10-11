@@ -34,6 +34,7 @@
 #include "main/main.h"
 #include "main/savestates.h"
 #include "main/cheat.h"
+#include "main/eventloop.h"
 #include "osd/osd.h"
 #include "plugin/plugin.h"
 
@@ -397,6 +398,33 @@ void check_interupt(void)
     }
 }
 
+void X11_PumpEvents()
+{
+ 	XEvent  xev;
+			
+	while (RPI_NextXEvent(&xev) )
+	{   // check for events from the x-server
+		switch (xev.type)
+		{	
+			case MotionNotify:   // if mouse has moved
+        				//xev.xmotion.x,xev.xmotion.y
+        				
+				break;         
+			case ButtonPress:
+				// xev.xbutton.state, xev.xbutton.button << endl;
+				break;
+			case KeyPress:
+				event_sdl_keydown(xev.xkey.keycode, xev.xkey.state)		;
+				break;
+			case KeyRelease:
+				event_sdl_keyup(xev.xkey.keycode, xev.xkey.state);	//TODO is this correct?
+				break;			
+			default: 
+				break;
+		}
+	}
+}
+
 void gen_interupt(void)
 {
 	/*static int count=0, time=0;
@@ -472,29 +500,8 @@ void gen_interupt(void)
             lircCheckInput();
 #endif
             SDL_PumpEvents();
-            
-            XEvent  xev;
-		while (RPI_NextXEvent(&xev) )
-		{   // check for events from the x-server
-			switch (xev.type)
-			{	
-				case MotionNotify:   // if mouse has moved
-            				//cout << "move to:" << xev.xmotion.x << "," << xev.xmotion.y << endl;
-            				
-					break;         
-				case ButtonPress:
-					//cout << "Button Press: " << xev.xbutton.state << ", " << xev.xbutton.button << endl;
-					break;
-				case KeyPress:
-					//cout << "Key Press: " << xev.xkey.keycode << endl;		
-				default: 
-					break;
-			}
-      		}
-            
-            
-            
-
+	X11_PumpEvents();
+           
             refresh_stat();
 
             // if paused, poll for input events
@@ -506,6 +513,7 @@ void gen_interupt(void)
                 {
                     SDL_Delay(10);
                     SDL_PumpEvents();
+                    X11_PumpEvents();
 #ifdef WITH_LIRC
                     lircCheckInput();
 #endif //WITH_LIRC
