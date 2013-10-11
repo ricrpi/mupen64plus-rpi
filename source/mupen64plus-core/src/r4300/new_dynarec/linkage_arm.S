@@ -942,12 +942,7 @@ write_rdramb_new:
 write_rdramh_new:
 	ldr	r3, [fp, #ram_offset-dynarec_local]
 	ldr	r2, [fp, #address-dynarec_local]
-	
-	/*ldrh	r0, [fp, #hword-dynarec_local]*/
-	ldr	r0, [fp, #hword-dynarec_local]
-	LSL	r0, #16
-	LSR	r0, #16
-	
+	ldrh	r0, [fp, #hword-dynarec_local]
 	eor	r2, r2, #2
 	lsl	r3, r3, #2
 	str	r0, [r2, r3]
@@ -1027,12 +1022,7 @@ read_nomemh_new:
 	bmi	tlb_exception
 	lsl	r12, r12, #2
 	eor	r2, r2, #2
-	
-	/*ldrh	r0, [r2, r12]*/
-	ldr	r0, [r2, r12]
-	LSL	r0, #16
-	LSR	r0, #16
-	
+	ldrh	r0, [r2, r12]
 	str	r0, [fp, #readmem_dword-dynarec_local]
 	mov	pc, lr
 	.size	read_nomemh_new, .-read_nomemh_new
@@ -1118,12 +1108,7 @@ write_nomemh_new:
 	lsls	r12, #2
 	bcs	tlb_exception
 	eor	r2, r2, #2
-
-	/*ldrh	r0, [fp, #hword-dynarec_local]*/
-	ldr	r0, [fp, #hword-dynarec_local]
-	LSL	r0, #16
-	LSR	r0, #16
-	
+	ldrh	r0, [fp, #hword-dynarec_local]	
 	str	r0, [r2, r12]
 	mov	pc, lr
 	.size	write_nomemh_new, .-write_nomemh_new
