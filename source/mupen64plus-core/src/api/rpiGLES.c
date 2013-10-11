@@ -18,7 +18,7 @@
 #include <bcm_host.h>
 
 
-#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+//#define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT(...)
@@ -28,7 +28,6 @@
 static DISPMANX_ELEMENT_HANDLE_T dispman_element;
 static DISPMANX_DISPLAY_HANDLE_T dispman_display;
 static DISPMANX_UPDATE_HANDLE_T dispman_update;
-static VC_RECT_T dst_rect, src_rect;
 static EGL_DISPMANX_WINDOW_T nativewindow;
 
 // X11 variables
@@ -41,15 +40,18 @@ static EGLContext  egl_context;
 static EGLSurface  egl_surface;
 
 //internal variables
-static VC_RECT_T dest_rect;
-static unsigned int bPaused=0;
+static VC_RECT_T src_rect, dest_rect;
+static unsigned int bPaused=1;
 static unsigned int bFullScreened=0;
 static uint32_t uiXflags=0; 
 static unsigned int bUsingXwindow=0;
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 void RPI_Pause(unsigned int bPause)
 {	
+	if (!bUsingXwindow) return;
+	
 	if (bPause && !bPaused)
 	{
 		DEBUG_PRINT("Pausing\n");
@@ -62,7 +64,8 @@ void RPI_Pause(unsigned int bPause)
 	   	dummy_rect.height = 1;
 
 		dispman_update = vc_dispmanx_update_start( 0 /* Priority*/);
-	
+	DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
+
 		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 
 			0, 255, &dummy_rect, &src_rect, DISPMANX_PROTECTION_NONE,(DISPMANX_TRANSFORM_T)0 );
    
@@ -99,18 +102,29 @@ static int RPI_OpenDispmanx(unsigned int uiWidth, unsigned int uiHeight)
    	src_rect.width 	= uiWidth	<< 16;
    	src_rect.height = uiHeight 	<< 16;   
 	
-   	dispman_display = vc_dispmanx_display_open( 0 /* LCD */);
-   	dispman_update = vc_dispmanx_update_start( 0 /* Priority*/);
+	if (bUsingXwindow)	//if using X11 do not go full screen. Resize will take place later
+	{
+		dest_rect.x = 0;
+		dest_rect.y = 0;
+		dest_rect.width = 1;
+		dest_rect.height = 1;
+	}
+
+	DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
+   	
+   	dispman_display = vc_dispmanx_display_open(0);
+
+   	dispman_update = vc_dispmanx_update_start(0);
 	
-   	dispman_element = vc_dispmanx_element_add ( dispman_update, dispman_display,0/*layer*/, &dst_rect, 
+   	dispman_element = vc_dispmanx_element_add ( dispman_update, dispman_display,0/*layer*/, &dest_rect, 
 		0 /*src*/,&src_rect, DISPMANX_PROTECTION_NONE, &dispman_alpha, 0, (DISPMANX_TRANSFORM_T)0);
 
-   	nativewindow.element = dispman_element;
+   	vc_dispmanx_update_submit_sync( dispman_update );
+    
+	nativewindow.element = dispman_element;
    	nativewindow.width = uiWidth;
    	nativewindow.height = uiHeight;
 
-   	vc_dispmanx_update_submit_sync( dispman_update );
-   	
    	return 0;
 }
 
@@ -122,11 +136,10 @@ static int RPI_OpenXWindow(const char* sTitle, unsigned int uiWidth, unsigned in
 	root = DefaultRootWindow(x_display);
 	win = XCreateSimpleWindow(x_display, root, 10, 10, uiWidth, uiHeight, 0, 0, 0);
 
-	if (NULL == win) return 2;
+	if (0 == win) return 2;
  
 	XSetWindowAttributes swa;
-	uint32_t temp;
-
+	
 	swa.event_mask = Xflags | StructureNotifyMask 
     // | ResizeRedirectMask | VisibilityChangeMask | ExposureMask
 	;	
@@ -137,19 +150,7 @@ static int RPI_OpenXWindow(const char* sTitle, unsigned int uiWidth, unsigned in
 	// make the window visible on the screen
 	XMapWindow (x_display, win);
 	XStoreName (x_display, win, sTitle);
-
-	/* Open display */
-	//Window screen = 
-	XDefaultScreen(x_display);
-
-	//dest_rect.width = DisplayWidth(x_display, screen);
-	//dest_rect.height = DisplayHeight(x_display, screen);
-
-	XGetGeometry(x_display, win, (Window*)&temp, &dest_rect.x, &dest_rect.y, (uint32_t*)&dest_rect.width, 
-			(uint32_t*)&dest_rect.height, &temp, &temp);
-
-	DEBUG_PRINT("Window at %d,%d %dx%d\n", dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
-
+	
 	bUsingXwindow = 1;
 	
 	return 0;
@@ -218,7 +219,7 @@ static int RPI_OpenEGL_GLES2()
    	//// associate the egl-context with the egl-surface
    	eglMakeCurrent( egl_display, egl_surface, egl_surface, egl_context );
      
-	glViewport ( 0 , 0 , dest_rect.width , dest_rect.height );
+	glViewport ( 0 , 0 , src_rect.width , src_rect.height );
 	return 0;
 }
 
@@ -241,7 +242,7 @@ int RPI_OpenWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeig
 
 	RPI_OpenEGL_GLES2();
 
-	//RPI_Pause(0);
+	RPI_Pause(0);
 
 	DEBUG_PRINT("RPI_OpenWindow() finished\n");
 	return 0;
@@ -264,6 +265,7 @@ int RPI_GetWindowSize(unsigned int *uiWidth, unsigned int *uiHeight)
 
 int RPI_FullScreen(unsigned int bFullscreen)
 {
+	DEBUG_PRINT("RPI_FullScreen(%d)\n", bFullscreen);
 	if (bFullscreen)
 	{
 		bFullScreened = 1;
@@ -274,7 +276,8 @@ int RPI_FullScreen(unsigned int bFullscreen)
 	   	dummy_rect.height = 0;
 
 		dispman_update = vc_dispmanx_update_start(0);
-	
+		DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
+
 		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 
 			0, 255, &dummy_rect, &src_rect, DISPMANX_PROTECTION_NONE,(DISPMANX_TRANSFORM_T)0 );
    
@@ -284,7 +287,8 @@ int RPI_FullScreen(unsigned int bFullscreen)
 	{
 		bFullScreened = 0;
 		dispman_update = vc_dispmanx_update_start( 0 /* Priority*/);
-	
+		DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
+
 		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 
 			0, 255, &dest_rect, &src_rect, DISPMANX_PROTECTION_NONE,(DISPMANX_TRANSFORM_T)0 );
    
@@ -299,12 +303,16 @@ int RPI_FullScreen(unsigned int bFullscreen)
 
 int RPI_ChangeTitle(const char* sTitle)
 {
-	if (bUsingXwindow)	XStoreName (x_display, win, sTitle);
+	if (!bUsingXwindow) return 1;
+	
+	DEBUG_PRINT("RPI_ChangeTitle(\"%s\")\n", sTitle);
+	XStoreName (x_display, win, sTitle);
 	return 0;
 }
 
 int RPI_CloseWindow()
 {
+	DEBUG_PRINT("RPI_CloseWindow\n");
 	eglDestroyContext ( egl_display, egl_context );
    	eglDestroySurface ( egl_display, egl_surface );
    	eglTerminate      ( egl_display );
@@ -319,21 +327,17 @@ int RPI_CloseWindow()
 
 static int RPI_MoveScreen()
 {
-	VC_RECT_T dummy_rect;
-	dummy_rect.x = 0;
-	dummy_rect.y = 0;
-	dummy_rect.width = 1;
-	dummy_rect.height = 1;
-	
-	glViewport ( 0 , 0 , dest_rect.width , dest_rect.height );
-	
-	dispman_update = vc_dispmanx_update_start( 0);
-	
-	vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 0, 255, &dummy_rect, 
-		&src_rect, DISPMANX_PROTECTION_NONE, (DISPMANX_TRANSFORM_T)0 );
-   
-   	vc_dispmanx_update_submit_sync( dispman_update );
-	
+	//glViewport ( 0 , 0 , dest_rect.width , dest_rect.height );	//If changing the Viewport then must also change the src_rect
+	if (bUsingXwindow)
+	{
+		dispman_update = vc_dispmanx_update_start(0);
+		DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
+
+		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 0, 255, &dest_rect, 
+			&src_rect, DISPMANX_PROTECTION_NONE, (DISPMANX_TRANSFORM_T)0 );
+	   
+	   	vc_dispmanx_update_submit_sync( dispman_update );
+	}	
 	return 0;	
 }
 
@@ -358,12 +362,12 @@ int RPI_NextXEvent(XEvent* xEvent)
 		     			dest_rect.height != xEvent->xconfigure.height ||
 		     			1 != xEvent->xconfigure.x)
 		     		{
-		     			DEBUG_PRINT("Screen size changed\n");
+		     			DEBUG_PRINT("RPI Screen size changed\n");
 		     			dest_rect.x = xEvent->xconfigure.x;
 					dest_rect.y = xEvent->xconfigure.y;
 					dest_rect.width = xEvent->xconfigure.width;
 					dest_rect.height = xEvent->xconfigure.height;
-					RPI_MoveScreen();
+					if (!bPaused) RPI_MoveScreen();
 				}
 			}
 			return 1;

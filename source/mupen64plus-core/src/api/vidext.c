@@ -173,9 +173,9 @@ SDL_FULLSCREEN;
 
 EXPORT m64p_error CALL VidExt_SetVideoMode(int Width, int Height, int BitsPerPixel, m64p_video_mode ScreenMode, m64p_video_flags Flags)
 {
-	int bFullScreen =0; //TODO should be set to cfg value
-	
-	RPI_OpenWindow("Mupen64plus", (unsigned int)Width, (unsigned int)Height, bFullScreen, PointerMotionMask | KeyPressMask);
+	RPI_OpenWindow("Mupen64plus", (unsigned int)Width, (unsigned int)Height, l_Fullscreen, 
+	PointerMotionMask | ButtonPressMask | ButtonReleaseMask |
+	KeyPressMask | KeyReleaseMask);
 	
 	return M64ERR_SUCCESS;
 }
