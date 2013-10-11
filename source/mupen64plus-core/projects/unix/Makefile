@@ -97,6 +97,7 @@ ifneq ("$(filter arm%,$(HOST_CPU))","")
     PIC ?= 1
     NEW_DYNAREC := 1
     CFLAGS += -mfpu=vfp
+    ARM := 1
     $(warning Architecture "$(HOST_CPU)" not officially supported.')
   endif
 endif
@@ -440,9 +441,12 @@ ifneq ($(NO_ASM), 1)
       DYNAREC = x86
     endif
   endif
+  
   ifeq ($(CPU), ARM)
     ifeq ($(ARCH_DETECTED), 32BITS)
       DYNAREC = arm
+      CFLAGS += -DARM
+      SOURCE += $(SRCDIR)/memory/dma_arm.S
     endif
   endif
 endif
