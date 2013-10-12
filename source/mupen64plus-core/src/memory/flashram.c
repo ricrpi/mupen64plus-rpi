@@ -133,7 +133,7 @@ void flashram_command(unsigned int command)
         {
             unsigned int i;
             flashram_read_file();
-			DebugMessage(M64MSG_INFO, "flashram,c:%d %d", __LINE__, flashram_info.erase_offset);
+			//DebugMessage(M64MSG_INFO, "flashram,c:%d %d", __LINE__, flashram_info.erase_offset);
             for (i=flashram_info.erase_offset; i<(flashram_info.erase_offset+128); i++)
             {
                 flashram[i^S8] = 0xff;
@@ -145,7 +145,7 @@ void flashram_command(unsigned int command)
         {
             int i;
             flashram_read_file();
-DebugMessage(M64MSG_INFO, "flashram,c:%d %d", __LINE__, flashram_info.erase_offset);
+//DebugMessage(M64MSG_INFO, "flashram,c:%d %d", __LINE__, flashram_info.erase_offset);
             for (i=0; i<128; i++)
             {
                 flashram[(flashram_info.erase_offset+i)^S8]=
@@ -189,7 +189,7 @@ void dma_read_flashram(void)
         break;
     case READ_MODE:
         flashram_read_file();
-DebugMessage(M64MSG_INFO, "flashram,c:%d %d", __LINE__, flashram_info.erase_offset);
+//DebugMessage(M64MSG_INFO, "flashram,c:%d %d", __LINE__, flashram_info.erase_offset);
         for (i=0; i<(pi_register.pi_wr_len_reg & 0x0FFFFFF)+1; i++)
         {
             ((unsigned char*)rdram)[(pi_register.pi_dram_addr_reg+i)^S8]=

@@ -54,18 +54,18 @@ dma_copy:
 	cmp		r3, #0			// uiCount	(count)
 	beq		E
 
-	push 	{r4-r7}			// save registers
+	push 	{r4-r6}			// save registers
 
-	ldr 	r4, [sp, #20]	// uiSkip		(skip)
+	ldr 	r4, [sp, #12]	// uiSkip		(skip)
 	cmp		r4, #0
 	beq		E2
 
 L1:	
 	mov 	r5, r2			// i = length
 L2:	
-	ldr		r7, [r1],#4		// load value at pFrom and pFrom += 4
-	//rev		r7, r7			// swap bytes 
-	str		r7, [r0],#4		// save back to pTo and pTo += 4
+	ldr		r6, [r1],#4		// load value at pFrom and pFrom += 4
+	//rev		r6, r6			// swap bytes 
+	str		r6, [r0],#4		// save back to pTo and pTo += 4
 
 	//add		r0, #4			// (dramaddr ++)
 	//add		r1, #4			// (memaddr ++)
@@ -76,13 +76,13 @@ L2:
 	subs 	r4, #1			// j--
 	bgt 	L1				// while j > 0 goto L1
 
-	pop {r4-r7}				// restore registers
+	pop {r4-r6}				// restore registers
 
 	mov r0, #0
 	mov	pc, lr				// return 0
 
 E2:
-	pop {r4-r7}				// restore registers
+	pop {r4-r6}				// restore registers
 
 E:
 	mov r0, #1
