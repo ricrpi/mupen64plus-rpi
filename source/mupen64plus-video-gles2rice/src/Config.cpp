@@ -301,7 +301,7 @@ void GenerateFrameBufferOptions(void)
 
 BOOL InitConfiguration(void)
 {
-    if (ConfigOpenSection("Video-General", &l_ConfigVideoGeneral) != M64ERR_SUCCESS)
+	if (ConfigOpenSection("Video-General", &l_ConfigVideoGeneral) != M64ERR_SUCCESS)
     {
         DebugMessage(M64MSG_ERROR, "Unable to open Video-General configuration section");
         return FALSE;
@@ -312,7 +312,9 @@ BOOL InitConfiguration(void)
         return FALSE;
     }
 
-    ConfigSetDefaultBool(l_ConfigVideoGeneral, "Fullscreen", 0, "Use fullscreen mode if True, or windowed mode if False ");
+	DebugMessage(M64MSG_INFO, "DEBUG Video-Rice set default configuration");
+
+    ConfigSetDefaultBool(l_ConfigVideoGeneral, "Fullscreen", FALSE, "Use fullscreen mode if True, or windowed mode if False ");
     ConfigSetDefaultInt(l_ConfigVideoGeneral, "ScreenWidth", 640, "Width of output window or fullscreen width");
     ConfigSetDefaultInt(l_ConfigVideoGeneral, "ScreenHeight", 480, "Height of output window or fullscreen height");
     ConfigSetDefaultBool(l_ConfigVideoGeneral, "VerticalSync", 0, "If true, activate the SDL_GL_SWAP_CONTROL attribute");
@@ -354,7 +356,12 @@ BOOL InitConfiguration(void)
     ConfigSetDefaultInt(l_ConfigVideoRice, "ColorQuality", TEXTURE_FMT_A8R8G8B8, "Color bit depth for rendering window (0=32 bits, 1=16 bits)");
     ConfigSetDefaultInt(l_ConfigVideoRice, "OpenGLRenderSetting", OGL_DEVICE, "OpenGL level to support (0=auto, 1=OGL_1.1, 2=OGL_1.2, 3=OGL_1.3, 4=OGL_1.4, 5=OGL_1.4_V2, 6=OGL_TNT2, 7=NVIDIA_OGL, 8=OGL_FRAGMENT_PROGRAM)");
     ConfigSetDefaultInt(l_ConfigVideoRice, "AnisotropicFiltering", 0, "Enable/Disable Anisotropic Filtering for Mipmapping (0=no filtering, 2-16=quality). This is uneffective if Mipmapping is 0. If the given value is to high to be supported by your graphic card, the value will be the highest value your graphic card can support. Better result with Trilinear filtering");
-    return TRUE;
+
+	
+	ConfigSaveSection("Video-General");
+	ConfigSaveSection("Video-Rice");    
+	
+return TRUE;
 }
 
 bool isMMXSupported() 

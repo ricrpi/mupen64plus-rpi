@@ -74,6 +74,7 @@ void (*renderCallback)(int) = NULL;
 
 /* definitions of pointers to Core config functions */
 ptr_ConfigOpenSection      ConfigOpenSection = NULL;
+ptr_ConfigSaveSection      ConfigSaveSection 	= NULL;
 ptr_ConfigSetParameter     ConfigSetParameter = NULL;
 ptr_ConfigGetParameter     ConfigGetParameter = NULL;
 ptr_ConfigGetParameterHelp ConfigGetParameterHelp = NULL;
@@ -605,22 +606,23 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle, void *Con
     }
 
     /* Get the core config function pointers from the library handle */
-    ConfigOpenSection = (ptr_ConfigOpenSection) osal_dynlib_getproc(CoreLibHandle, "ConfigOpenSection");
-    ConfigSetParameter = (ptr_ConfigSetParameter) osal_dynlib_getproc(CoreLibHandle, "ConfigSetParameter");
-    ConfigGetParameter = (ptr_ConfigGetParameter) osal_dynlib_getproc(CoreLibHandle, "ConfigGetParameter");
-    ConfigSetDefaultInt = (ptr_ConfigSetDefaultInt) osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultInt");
-    ConfigSetDefaultFloat = (ptr_ConfigSetDefaultFloat) osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultFloat");
-    ConfigSetDefaultBool = (ptr_ConfigSetDefaultBool) osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultBool");
-    ConfigSetDefaultString = (ptr_ConfigSetDefaultString) osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultString");
-    ConfigGetParamInt = (ptr_ConfigGetParamInt) osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamInt");
-    ConfigGetParamFloat = (ptr_ConfigGetParamFloat) osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamFloat");
-    ConfigGetParamBool = (ptr_ConfigGetParamBool) osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamBool");
-    ConfigGetParamString = (ptr_ConfigGetParamString) osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamString");
+    ConfigOpenSection = 		(ptr_ConfigOpenSection) 		osal_dynlib_getproc(CoreLibHandle, "ConfigOpenSection");
+	ConfigSaveSection = 		(ptr_ConfigSaveSection) 		osal_dynlib_getproc(CoreLibHandle, "ConfigSaveSection");
+    ConfigSetParameter = 		(ptr_ConfigSetParameter) 		osal_dynlib_getproc(CoreLibHandle, "ConfigSetParameter");
+    ConfigGetParameter = 		(ptr_ConfigGetParameter) 		osal_dynlib_getproc(CoreLibHandle, "ConfigGetParameter");
+    ConfigSetDefaultInt = 		(ptr_ConfigSetDefaultInt) 		osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultInt");
+    ConfigSetDefaultFloat = 	(ptr_ConfigSetDefaultFloat) 	osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultFloat");
+    ConfigSetDefaultBool = 		(ptr_ConfigSetDefaultBool) 		osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultBool");
+    ConfigSetDefaultString = 	(ptr_ConfigSetDefaultString) 	osal_dynlib_getproc(CoreLibHandle, "ConfigSetDefaultString");
+    ConfigGetParamInt = 		(ptr_ConfigGetParamInt) 		osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamInt");
+    ConfigGetParamFloat = 		(ptr_ConfigGetParamFloat) 		osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamFloat");
+    ConfigGetParamBool = 		(ptr_ConfigGetParamBool) 		osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamBool");
+    ConfigGetParamString = 		(ptr_ConfigGetParamString) 		osal_dynlib_getproc(CoreLibHandle, "ConfigGetParamString");
 
-    ConfigGetSharedDataFilepath = (ptr_ConfigGetSharedDataFilepath) osal_dynlib_getproc(CoreLibHandle, "ConfigGetSharedDataFilepath");
-    ConfigGetUserConfigPath = (ptr_ConfigGetUserConfigPath) osal_dynlib_getproc(CoreLibHandle, "ConfigGetUserConfigPath");
-    ConfigGetUserDataPath = (ptr_ConfigGetUserDataPath) osal_dynlib_getproc(CoreLibHandle, "ConfigGetUserDataPath");
-    ConfigGetUserCachePath = (ptr_ConfigGetUserCachePath) osal_dynlib_getproc(CoreLibHandle, "ConfigGetUserCachePath");
+    ConfigGetSharedDataFilepath = 	(ptr_ConfigGetSharedDataFilepath) 	osal_dynlib_getproc(CoreLibHandle, "ConfigGetSharedDataFilepath");
+    ConfigGetUserConfigPath = 		(ptr_ConfigGetUserConfigPath) 		osal_dynlib_getproc(CoreLibHandle, "ConfigGetUserConfigPath");
+    ConfigGetUserDataPath = 		(ptr_ConfigGetUserDataPath) 		osal_dynlib_getproc(CoreLibHandle, "ConfigGetUserDataPath");
+    ConfigGetUserCachePath = 		(ptr_ConfigGetUserCachePath) 		osal_dynlib_getproc(CoreLibHandle, "ConfigGetUserCachePath");
 
     if (!ConfigOpenSection || !ConfigSetParameter || !ConfigGetParameter ||
         !ConfigSetDefaultInt || !ConfigSetDefaultFloat || !ConfigSetDefaultBool || !ConfigSetDefaultString ||
@@ -653,6 +655,7 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle, void *Con
     }
 
     /* open config section handles and set parameter default values */
+DebugMessage(M64MSG_INFO, "DEBUG Video-Rice InitConfiguration() %d", __LINE__);
     if (!InitConfiguration())
         return M64ERR_INTERNAL;
 
@@ -825,6 +828,7 @@ EXPORT int CALL InitiateGFX(GFX_INFO Gfx_Info)
     status.ToResize = false;
     status.bDisableFPS=false;
 
+	DebugMessage(M64MSG_INFO, "DEBUG Video-Rice InitConfiguration() %d", __LINE__);
     if (!InitConfiguration())
     {
         DebugMessage(M64MSG_ERROR, "Failed to read configuration data");

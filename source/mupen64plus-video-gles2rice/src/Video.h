@@ -164,6 +164,7 @@ extern unsigned char *g_pRDRAMu8;
 
 /* declarations of pointers to Core config functions */
 extern ptr_ConfigListSections     ConfigListSections;
+extern ptr_ConfigSaveSection      ConfigSaveSection;
 extern ptr_ConfigOpenSection      ConfigOpenSection;
 extern ptr_ConfigListParameters   ConfigListParameters;
 extern ptr_ConfigSaveFile         ConfigSaveFile;
