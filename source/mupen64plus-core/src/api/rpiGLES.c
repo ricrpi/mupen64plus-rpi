@@ -49,6 +49,55 @@ static void (*PauseCallback)(int) = NULL;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
+#include "unistd.h"
+#include "linux/kd.h"
+#include "termios.h"
+#include "fcntl.h"
+#include "sys/ioctl.h"
+
+#include <signal.h>
+
+static struct termios tty_attr_old;
+static int old_keyboard_mode;
+static int bRawKeyboard =0;
+
+static int setupKeyboard()
+{
+    struct termios tty_attr;
+    int flags;
+
+    /* make stdin non-blocking */
+    flags = fcntl(0, F_GETFL);
+    flags |= O_NONBLOCK;
+    fcntl(0, F_SETFL, flags);
+
+    /* save old keyboard mode */
+    if (ioctl(0, KDGKBMODE, &old_keyboard_mode) < 0) {
+	DebugMessage(M64MSG_ERROR, "Could not change keyboard mode");
+	return 0;
+    }
+
+    tcgetattr(0, &tty_attr_old);
+
+    /* turn off buffering, echo and key processing */
+    tty_attr = tty_attr_old;
+    tty_attr.c_lflag &= ~(ICANON | ECHO | ISIG);
+    tty_attr.c_iflag &= ~(ISTRIP | INLCR | ICRNL | IGNCR | IXON | IXOFF);
+    tcsetattr(0, TCSANOW, &tty_attr);
+
+    ioctl(0, KDSKBMODE, K_RAW);
+	bRawKeyboard = 1;
+    return 1;
+}
+
+static void restoreKeyboard()
+{
+    tcsetattr(0, TCSAFLUSH, &tty_attr_old);
+    ioctl(0, KDSKBMODE, old_keyboard_mode);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 void RPI_SetPauseCallback(void (*callback)(int))
 {
 	PauseCallback = callback;
@@ -232,6 +281,11 @@ static int RPI_OpenEGL_GLES2()
 	return 0;
 }
 
+void (*sighandler)(int val)
+{
+	restoreKeyboard();
+}
+
 int RPI_OpenWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeight, int bFullScreen, unsigned int Xflags)
 {
 	DEBUG_PRINT("RPI_OpenWindow(\"%s\", %d, %d)\n", sTitle, uiWidth, uiHeight);
@@ -253,6 +307,15 @@ int RPI_OpenWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeig
 
 	RPI_Pause(0);
 
+	if (!bUsingXwindow)
+	{
+		// we want the keyboard returned to normal if something goes wrong
+		signal(SIGSEGV, sighandler);
+		signal(SIGKILL, sighandler);
+
+		//change keyboard to raw mode
+		setupKeyboard();
+	}
 	DEBUG_PRINT("RPI_OpenWindow() finished\n");
 	return 0;
 }
@@ -321,6 +384,8 @@ int RPI_ChangeTitle(const char* sTitle)
 
 int RPI_CloseWindow()
 {
+	restoreKeyboard();
+	
 	DEBUG_PRINT("RPI_CloseWindow\n");
 	eglDestroyContext ( egl_display, egl_context );
    	eglDestroySurface ( egl_display, egl_surface );
@@ -386,11 +451,41 @@ int RPI_NextXEvent(XEvent* xEvent)
 			return 0;
 		}
 	}
-	else // there is no X window. TODO get from stdin - would allow debugging remotely
+	else if (bRawKeyboard) // there is no X window.
 	{
-		
-		return 0;
+		char buf[1];
+    	int res;
+
+		/* read scan code from stdin */
+		res = read(0, &buf[0], 1);
+		/* keep reading til there's no more*/
+		if (res > 0) 
+		{
+			DEBUG_PRINT("keyboard input: %d, %d %d\n",res, buf[0], buf[1]);
+			
+			if ( buf[0] & 0x80 )
+			{
+				xEvent->type = KeyPress;		
+			}
+			else
+			{
+				xEvent->type = KeyRelease;
+			}
+			
+			xEvent->xev.xkey.keycode = buf[0];
+			//xEvent->xev.xkey.state = buf[1];
+		}
+			
+		if (res > 1) return 1;
+    	}
 	}
+	else  // remote ssh or in terminal or X window broken
+	{
+
+	}
+
+	//catch all
+	return 0;
 }
 
 void RPI_SwapBuffers()
