@@ -73,7 +73,7 @@ static int setupKeyboard()
 
     /* save old keyboard mode */
     if (ioctl(0, KDGKBMODE, &old_keyboard_mode) < 0) {
-	DebugMessage(M64MSG_ERROR, "Could not change keyboard mode");
+	DEBUG_PRINT("Could not change keyboard mode");
 	return 0;
     }
 
@@ -281,7 +281,7 @@ static int RPI_OpenEGL_GLES2()
 	return 0;
 }
 
-void (*sighandler)(int val)
+void restKeyboard(int val)
 {
 	restoreKeyboard();
 }
@@ -310,8 +310,8 @@ int RPI_OpenWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeig
 	if (!bUsingXwindow)
 	{
 		// we want the keyboard returned to normal if something goes wrong
-		signal(SIGSEGV, sighandler);
-		signal(SIGKILL, sighandler);
+		signal(SIGSEGV, &restKeyboard);
+		signal(SIGKILL, &restKeyboard);
 
 		//change keyboard to raw mode
 		setupKeyboard();
@@ -472,12 +472,11 @@ int RPI_NextXEvent(XEvent* xEvent)
 				xEvent->type = KeyRelease;
 			}
 			
-			xEvent->xev.xkey.keycode = buf[0];
-			//xEvent->xev.xkey.state = buf[1];
+			xEvent->xkey.keycode = buf[0];
+			//xEvent->xkey.state = buf[1];
 		}
 			
 		if (res > 1) return 1;
-    	}
 	}
 	else  // remote ssh or in terminal or X window broken
 	{
