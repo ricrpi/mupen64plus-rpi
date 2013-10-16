@@ -5,16 +5,15 @@
  *
  * compile with:   g++  -lX11 -lEGL -lGLESv2  egl-example.cpp
  */
- 
+
 #include <stdio.h>
 
 #include <sys/time.h>
- 
+
 #include "rpiGLES.h"
 
 #include <GLES2/gl2.h>
 #include <EGL/egl.h>
-#include <pthread.h>	
 #include <bcm_host.h>
 
 #define DEBUG_PRINT(...) printf(__VA_ARGS__)
@@ -86,6 +85,7 @@ static int setupKeyboard()
 
     ioctl(0, KDSKBMODE, K_RAW);
 	bRawKeyboard = 1;
+	DEBUG_PRINT("Setup keyboard in RAW mode\n");
     return 1;
 }
 
@@ -282,7 +282,7 @@ static int RPI_OpenEGL_GLES2()
 
 void restKeyboard(int val)
 {
-	DEBUG_PRINT("signal %d, resoting keyboard\n", val);
+	DEBUG_PRINT("signal %d, restoring keyboard\n", val);
 	restoreKeyboard();
 }
 
@@ -454,8 +454,9 @@ int RPI_NextXEvent(XEvent* xEvent)
 	}
 	else if (bRawKeyboard) // there is no X window.
 	{
+		//DEBUG_PRINT("Check for keyboard event\n");
 		char buf[1];
-    	int res;
+    		int res;
 
 		/* read scan code from stdin */
 		res = read(0, &buf[0], 1);
@@ -465,8 +466,8 @@ int RPI_NextXEvent(XEvent* xEvent)
 			DEBUG_PRINT("keyboard input: %d, %d %d\n",res, buf[0], buf[1]);
 			if (buf[0] == 1)
 			{
-				restoreKeyboard();
-				exit(0);
+		//		restoreKeyboard();
+		//		exit(0);
 			}
 			if ( buf[0] & 0x80 )
 			{
@@ -479,13 +480,12 @@ int RPI_NextXEvent(XEvent* xEvent)
 
 			xEvent->xkey.keycode = buf[0];
 			//xEvent->xkey.state = buf[1];
+			return 1;
 		}
-
-		if (res > 1) return 1;
 	}
 	else  // remote ssh or in terminal or X window broken
 	{
-
+		DEBUG_PRINT("Don't know how to handle input\n");
 	}
 
 	//catch all
