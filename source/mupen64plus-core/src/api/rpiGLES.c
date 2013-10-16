@@ -17,8 +17,7 @@
 #include <pthread.h>	
 #include <bcm_host.h>
 
-
-//#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT(...)
@@ -104,14 +103,14 @@ void RPI_SetPauseCallback(void (*callback)(int))
 }
 
 void RPI_Pause(unsigned int bPause)
-{	
+{
 	if (!bUsingXwindow) return;
-	
+
 	if (bPause && !bPaused)
 	{
 		DEBUG_PRINT("Pausing\n");
 		XUngrabPointer(x_display,CurrentTime);
-		
+
 		VC_RECT_T dummy_rect;
 		dummy_rect.x = 0;
 	   	dummy_rect.y = 0;
@@ -123,19 +122,19 @@ void RPI_Pause(unsigned int bPause)
 
 		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 
 			0, 255, &dummy_rect, &src_rect, DISPMANX_PROTECTION_NONE,(DISPMANX_TRANSFORM_T)0 );
-   
+
    		vc_dispmanx_update_submit_sync( dispman_update );
-   		
+
    		if (NULL != PauseCallback) PauseCallback(bPause);
 	}
 	else if (!bPause && bPaused)
 	{
 		DEBUG_PRINT("Unpausing\n");
-		XGrabPointer(x_display,DefaultRootWindow(x_display), 1, 	
+		XGrabPointer(x_display,DefaultRootWindow(x_display), 1,
 		ButtonPressMask | ButtonReleaseMask |PointerMotionMask |
-		FocusChangeMask | EnterWindowMask | FocusChangeMask, //| LeaveWindowMask, 
+		FocusChangeMask | EnterWindowMask | FocusChangeMask, //| LeaveWindowMask,
 		GrabModeAsync,GrabModeAsync, win, None, CurrentTime);
-		
+
 		if (bFullScreened)
 		{
 			RPI_FullScreen(1);
@@ -145,7 +144,7 @@ void RPI_Pause(unsigned int bPause)
 			RPI_FullScreen(0);
 		}
 		if (NULL != PauseCallback) PauseCallback(bPause);
-	}	
+	}
 	bPaused = bPause;
 }
 
@@ -154,12 +153,12 @@ static int RPI_OpenDispmanx(unsigned int uiWidth, unsigned int uiHeight)
 	VC_DISPMANX_ALPHA_T dispman_alpha = {DISPMANX_FLAGS_ALPHA_FIXED_ALL_PIXELS,255,0};
 
 	bcm_host_init();
-	 
+
    	src_rect.x 		= 0;
    	src_rect.y 		= 0;
    	src_rect.width 	= uiWidth	<< 16;
    	src_rect.height = uiHeight 	<< 16;   
-	
+
 	if (bUsingXwindow)	//if using X11 do not go full screen. Resize will take place later
 	{
 		dest_rect.x = 0;
@@ -169,16 +168,16 @@ static int RPI_OpenDispmanx(unsigned int uiWidth, unsigned int uiHeight)
 	}
 
 	DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
-   	
+
    	dispman_display = vc_dispmanx_display_open(0);
 
    	dispman_update = vc_dispmanx_update_start(0);
-	
+
    	dispman_element = vc_dispmanx_element_add ( dispman_update, dispman_display,0/*layer*/, &dest_rect, 
 		0 /*src*/,&src_rect, DISPMANX_PROTECTION_NONE, &dispman_alpha, 0, (DISPMANX_TRANSFORM_T)0);
 
    	vc_dispmanx_update_submit_sync( dispman_update );
-    
+
 	nativewindow.element = dispman_element;
    	nativewindow.width = uiWidth;
    	nativewindow.height = uiHeight;
@@ -195,63 +194,63 @@ static int RPI_OpenXWindow(const char* sTitle, unsigned int uiWidth, unsigned in
 	win = XCreateSimpleWindow(x_display, root, 10, 10, uiWidth, uiHeight, 0, 0, 0);
 
 	if (0 == win) return 2;
- 
+
 	XSetWindowAttributes swa;
-	
+
 	swa.event_mask = Xflags | StructureNotifyMask 
     // | ResizeRedirectMask | VisibilityChangeMask | ExposureMask
-	;	
+	;
 	uiXflags = swa.event_mask;
-	
+
 	XSelectInput (x_display, win, swa.event_mask);
 
 	// make the window visible on the screen
 	XMapWindow (x_display, win);
 	XStoreName (x_display, win, sTitle);
-	
+
 	bUsingXwindow = 1;
-	
+
 	return 0;
 }
 
 static int RPI_OpenEGL_GLES2()
-{ 
+{
 	egl_display  =  eglGetDisplay(EGL_DEFAULT_DISPLAY);
    	if ( egl_display == EGL_NO_DISPLAY ) {
 		DEBUG_PRINT("No EGL display.\n");
 		return 1;
 	}
-   
+
 	EGLint majorVersion, minorVersion;
-   
+
 	if ( !eglInitialize( egl_display,  &majorVersion, &minorVersion ) ) {
       	DEBUG_PRINT("Unable to initialize EGL\n");
       return 1;
    	}
 
  	DEBUG_PRINT("EGL %d.%d Initialized\n", majorVersion, minorVersion);
-   
+
 	EGLint attr[] =
 	{
        	EGL_RED_SIZE,       8,
        	EGL_GREEN_SIZE,     8,
        	EGL_BLUE_SIZE,      8,
-       	EGL_ALPHA_SIZE,     8, 
-       	EGL_DEPTH_SIZE,     24, 
+       	EGL_ALPHA_SIZE,     8,
+       	EGL_DEPTH_SIZE,     24,
        	EGL_STENCIL_SIZE,   EGL_DONT_CARE,
 		EGL_SURFACE_TYPE, 	EGL_WINDOW_BIT,
 	   //EGL_BIND_TO_TEXTURE_RGBA, EGL_TRUE, 
 		EGL_SAMPLE_BUFFERS, 1,
 		EGL_NONE
    };
- 
+
    	EGLConfig  ecfg;
    	EGLint     num_config;
    	if ( !eglChooseConfig( egl_display, attr, &ecfg, 1, &num_config ) ) {
       	DEBUG_PRINT("Failed to choose config (eglError: %d)\n", eglGetError());
       	return 1;
    	}
- 
+
    if ( num_config != 1 ) {
       DEBUG_PRINT("Didn't get exactly one config, but %d\n",num_config);
       return 1;
@@ -273,16 +272,17 @@ static int RPI_OpenEGL_GLES2()
       	DEBUG_PRINT("Unable to create EGL context eglError: %d\n", eglGetError());
       	return 1;
    	}
- 
+
    	//// associate the egl-context with the egl-surface
    	eglMakeCurrent( egl_display, egl_surface, egl_surface, egl_context );
-     
+
 	glViewport ( 0 , 0 , src_rect.width , src_rect.height );
 	return 0;
 }
 
 void restKeyboard(int val)
 {
+	DEBUG_PRINT("signal %d, resoting keyboard\n", val);
 	restoreKeyboard();
 }
 
@@ -293,14 +293,14 @@ int RPI_OpenWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeig
 	if ( 0 < RPI_OpenXWindow(sTitle, uiWidth, uiHeight, bFullScreen, Xflags))
 	{
 		DEBUG_PRINT("Could not open X window\n");
-		
+
 		//make RPI_OpenDispmanx() go full screen with scaling
 		dest_rect.x = 0;
 		dest_rect.y = 0;
 		dest_rect.width = 0;
 		dest_rect.height =0;
-	}	
-	
+	}
+
 	RPI_OpenDispmanx(uiWidth, uiHeight);
 
 	RPI_OpenEGL_GLES2();
@@ -310,6 +310,7 @@ int RPI_OpenWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeig
 	if (!bUsingXwindow)
 	{
 		// we want the keyboard returned to normal if something goes wrong
+		signal(SIGTERM, &restKeyboard);
 		signal(SIGSEGV, &restKeyboard);
 		signal(SIGKILL, &restKeyboard);
 
@@ -329,7 +330,7 @@ int RPI_GetWindowSize(unsigned int *uiWidth, unsigned int *uiHeight)
 {
 	//if (uiWidth != NULL) *uiWidth  = dest_rect.width;
 	//if (uiHeight!= NULL) *uiHeight = dest_rect.height;
-	
+
 	if (uiWidth != NULL) *uiWidth  = src_rect.width >> 16;	//return the src dimensions to allow scaling in dispmanx
 	if (uiHeight!= NULL) *uiHeight = src_rect.height>> 16;
 	return 0;
@@ -352,7 +353,7 @@ int RPI_FullScreen(unsigned int bFullscreen)
 
 		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 
 			0, 255, &dummy_rect, &src_rect, DISPMANX_PROTECTION_NONE,(DISPMANX_TRANSFORM_T)0 );
-   
+
    		vc_dispmanx_update_submit_sync( dispman_update );
 	}
 	else if (bUsingXwindow)	// we can goto an X window
@@ -363,7 +364,7 @@ int RPI_FullScreen(unsigned int bFullscreen)
 
 		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 
 			0, 255, &dest_rect, &src_rect, DISPMANX_PROTECTION_NONE,(DISPMANX_TRANSFORM_T)0 );
-   
+
    		vc_dispmanx_update_submit_sync( dispman_update );
 	}
 	else
@@ -376,7 +377,7 @@ int RPI_FullScreen(unsigned int bFullscreen)
 int RPI_ChangeTitle(const char* sTitle)
 {
 	if (!bUsingXwindow) return 1;
-	
+
 	DEBUG_PRINT("RPI_ChangeTitle(\"%s\")\n", sTitle);
 	XStoreName (x_display, win, sTitle);
 	return 0;
@@ -384,18 +385,18 @@ int RPI_ChangeTitle(const char* sTitle)
 
 int RPI_CloseWindow()
 {
-	restoreKeyboard();
-	
+	if (!bUsingXwindow) restoreKeyboard();
+
 	DEBUG_PRINT("RPI_CloseWindow\n");
 	eglDestroyContext ( egl_display, egl_context );
    	eglDestroySurface ( egl_display, egl_surface );
    	eglTerminate      ( egl_display );
-   	
-	if (bUsingXwindow) 
+
+	if (bUsingXwindow)
 	{
 		XCloseDisplay     ( x_display );
 	   	XDestroyWindow    ( x_display, root );
-	}	
+	}
 	return 0;
 }
 
@@ -409,10 +410,10 @@ static int RPI_MoveScreen()
 
 		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 0, 255, &dest_rect, 
 			&src_rect, DISPMANX_PROTECTION_NONE, (DISPMANX_TRANSFORM_T)0 );
-	   
+
 	   	vc_dispmanx_update_submit_sync( dispman_update );
-	}	
-	return 0;	
+	}
+	return 0;
 }
 
 int RPI_NextXEvent(XEvent* xEvent)
@@ -420,9 +421,9 @@ int RPI_NextXEvent(XEvent* xEvent)
 	if (bUsingXwindow)
 	{
 		if (XPending ( x_display ))
-		{	
+		{
 		     	XNextEvent( x_display, xEvent );
-		     	
+
 		     	switch (xEvent->type)
 		     	{
 		     		case FocusOut:
@@ -431,7 +432,7 @@ int RPI_NextXEvent(XEvent* xEvent)
 	   				break;
 				case ConfigureNotify:
 		     		//case ResizeRequest:
-		     		
+
 		     		if (dest_rect.width != xEvent->xconfigure.width ||
 		     			dest_rect.height != xEvent->xconfigure.height ||
 		     			1 != xEvent->xconfigure.x)
@@ -462,20 +463,24 @@ int RPI_NextXEvent(XEvent* xEvent)
 		if (res > 0) 
 		{
 			DEBUG_PRINT("keyboard input: %d, %d %d\n",res, buf[0], buf[1]);
-			
+			if (buf[0] == 1)
+			{
+				restoreKeyboard();
+				exit(0);
+			}
 			if ( buf[0] & 0x80 )
 			{
-				xEvent->type = KeyPress;		
+				xEvent->type = KeyPress;
 			}
 			else
 			{
 				xEvent->type = KeyRelease;
 			}
-			
+
 			xEvent->xkey.keycode = buf[0];
 			//xEvent->xkey.state = buf[1];
 		}
-			
+
 		if (res > 1) return 1;
 	}
 	else  // remote ssh or in terminal or X window broken
