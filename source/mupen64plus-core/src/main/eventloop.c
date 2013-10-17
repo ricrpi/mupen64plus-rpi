@@ -407,7 +407,7 @@ int event_set_core_defaults(void)
 
     ConfigSetDefaultFloat(l_CoreEventsConfig, "Version", CONFIG_PARAM_VERSION,  "Mupen64Plus CoreEvents config parameter set version number.  Please don't change this version number.");
     /* Keyboard presses mapped to core functions */
-    ConfigSetDefaultInt(l_CoreEventsConfig, kbdStop, 1,          					"SDL keysym for stopping the emulator");
+    ConfigSetDefaultInt(l_CoreEventsConfig, kbdStop, SDLK_ESCAPE,	     	   "SDL keysym for stopping the emulator");
     ConfigSetDefaultInt(l_CoreEventsConfig, kbdFullscreen, SDL_NUM_SCANCODES,      "SDL keysym for switching between fullscreen/windowed modes");
     ConfigSetDefaultInt(l_CoreEventsConfig, kbdSave, SDL_SCANCODE_F5,              "SDL keysym for saving the emulator state");
     ConfigSetDefaultInt(l_CoreEventsConfig, kbdLoad, SDL_SCANCODE_F7,              "SDL keysym for loading the emulator state");
@@ -449,16 +449,14 @@ int event_set_core_defaults(void)
 
 void event_sdl_keydown(int keysym, int keymod)
 {
-    /* check all of the configurable commands */
-    if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdStop))
-        main_stop();
     /* check for the only 2 hard-coded key commands: Alt-enter for fullscreen and 0-9 for save state slot */
-    else if (keysym == SDL_SCANCODE_RETURN && (keymod & KMOD_ALT))
+    if (keysym == SDL_SCANCODE_RETURN && keymod & (KMOD_LALT | KMOD_RALT))
         gfx.changeWindow();
-    else if (keysym >= 2 && keysym <= 0x0a)
-        main_state_set_slot(keysym - 1);
-	else if (keysym == 0x0b)
-        main_state_set_slot(0);
+    else if (keysym >= SDL_SCANCODE_0 && keysym <= SDL_SCANCODE_9)
+        main_state_set_slot(keysym - SDL_SCANCODE_0);
+    /* check all of the configurable commands */
+    else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdStop))
+        main_stop();
     else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdFullscreen))
         gfx.changeWindow();
     else if (keysym == ConfigGetParamInt(l_CoreEventsConfig, kbdSave))

@@ -24,6 +24,74 @@
 #define DEBUG_PRINT(...)
 #endif
 
+/*
+0,	1,	2,	3,	4,	5,	6,	7,	8,	9,	10,	11,	12,	13,	14,	15,
+16,	17,	18,	19,	20,	21,	22,	23,	24,	25,	26,	27,	28,	29,	30,	31,
+32,	33,	34,	35,	36,	37,	38,	39,	40,	41,	42,	43,	44,	45,	45,	46,
+48,	49,	50,	51,	52,	53,	54,	55,	56,	57,	58,	59,	60,	61,	62,	63,
+64,	65,	66,	67,	68,	69,	70,	71,	72,	73,	74,	75,	76,	77,	78,	79,
+80,	81,	82,	83,	84,	85,	86,	87,	88,	89,	90,	91,	92,	93,	94,	95,
+96,	97,	98,	99,	100,101,102,103,104,105,106,107,108,109,110,111,
+112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127
+*/
+
+#define NA	(-1)
+
+static const int RAWtoSDL[] = {
+							  //0,			1,			2,			3,			4,			5,			6,			7,	
+								NA,			SDLK_ESCAPE,SDLK_1,		SDLK_2,		SDLK_3,		SDLK_4,		SDLK_5,		SDLK_6,
+							  //8,			9,			10,			11,			12,			13,			14,			15,	
+								SDLK_7,		SDLK_8,		SDLK_9,		SDLK_0,		SDLK_MINUS,	SDLK_EQUALS,SDLK_BACKSPACE,	SDLK_TAB,
+							  //16,			17,			18,			19,			20,			21,			22,			23,	
+								SDLK_q,		SDLK_w,		SDLK_e,		SDLK_r,		SDLK_t,		SDLK_y,		SDLK_u,		SDLK_i,
+							  //24,			25,			26,			27,			28,			29,			30,			31,		
+								SDLK_o,		SDLK_p,		SDLK_LEFTBRACKET,SDLK_RIGHTBRACKET,	SDLK_RETURN,NA,	SDLK_a,	SDLK_s,
+							  //32,			33,			34,			35,			36,			37,			38,			39,
+								SDLK_d,		SDLK_f,		SDLK_g,		SDLK_h,		SDLK_j,		SDLK_k,		SDLK_l,		SDLK_SEMICOLON,	
+							  //40,			41,			42,			43,			44,			45,			46,			47,
+								SDLK_AT, 	-1/*SDLK_GRAVE*/, NA,	SDLK_BACKSLASH,	SDLK_z,	SDLK_x,		SDLK_c,		SDLK_v,
+							  //48,			49,			50,			51,			52,			53,			54,			55,
+								SDLK_b,		SDLK_n,		SDLK_m,		SDLK_LESS,	SDLK_GREATER,SDLK_SLASH,NA,			SDLK_KP_MULTIPLY,
+							  //56 (0x38),	57,			58,			59,			60,			61,			62,			63,
+								NA,			SDLK_SPACE,	SDLK_CAPSLOCK,SDLK_F1,	SDLK_F2,	SDLK_F3,	SDLK_F4,	SDLK_F5,
+							  //64 (0x40),	65,			66,			67,			68,			69,			70,			71,
+								SDLK_F6,	SDLK_F7,	SDLK_F8,	SDLK_F9,	SDLK_F10,	-1/*SDLK_NUMLOCKCLEAR*/,	-1/*SDLK_SCROLLLOCK*/,	SDLK_KP7,	
+							  //72 (0x48),	73,			74,			75,			76,			77,			78,			79,	
+								SDLK_KP8,	SDLK_KP9,	SDLK_KP_MINUS, SDLK_KP4,SDLK_KP5, 	SDLK_KP6, 	SDLK_KP_PLUS,SDLK_KP1,
+							  //80 (0x50),	81,			82,			83,			84,			85,			86,			87,	
+								SDLK_KP2,	SDLK_KP3,	SDLK_KP0,	SDLK_KP_PERIOD,SDLK_SYSREQ,NA,		NA,			SDLK_F11,
+							  //88 (0x58),	89,			90,			91,			92,			93,			94,			95,
+								SDLK_F12,	NA,			NA,			NA,			NA,			NA,			NA,			NA,
+							  //96 (0x60),	97,			98,			99,			100,		101,		102,		103,
+								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
+							  //104,		105,		106,		107,		108,		109,		110,		111,
+								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
+							  //112,		113,		114,		115,		116,		117,		118,		119,
+								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
+							  //120,		121,		122,		123,		124,		125,		126,		127
+								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA
+								};
+
+static const int X11toSDL[] = { 0,			1,			2,			3,			4,			5,			6,			7,	
+								8,			9,			10,			11,			12,			13,			14,			15,
+								16,			17,			18,			19,			20,			21,			22,			23,
+								24,			25,			26,			SDLK_ESCAPE,28,			29,			30,			31,
+								32,			33,			34,			35,			36,			37,			38,			39,	
+								40,			41,			42,			43,			44,			45,			46,			47,
+								48,			49,			50,			51,			52,			53,			54,			55,	
+								56,			57,			58,			59,			60,			61,			62,			63,
+								64,			65,			66,			67,			68,			69,			70,			71,	
+								72,			73,			74,			75,			76,			77,			78,			79,
+								80,			81,			82,			83,			84,			85,			86,			87,	
+								88,			89,			90,			91,			92,			93,			94,			95,
+								96,			97,			98,			99,			100,		101,		102,		103,
+								104,		105,		106,		107,		108,		109,		110,		111,
+								112,		113,		114,		115,		116,		117,		118,		119,
+								120,		121,		122,		123,		124,		125,		126,		127};
+
+
+
+
 // Dispmanx variables
 static DISPMANX_ELEMENT_HANDLE_T dispman_element;
 static DISPMANX_DISPLAY_HANDLE_T dispman_display;
@@ -445,6 +513,11 @@ int RPI_NextXEvent(XEvent* xEvent)
 					dest_rect.width = xEvent->xconfigure.width;
 					dest_rect.height = xEvent->xconfigure.height;
 					if (!bPaused) RPI_MoveScreen();
+
+				case KeyRelease:
+				case KeyPress:
+					xEvent->xkey.keycode = X11toSDL[xEvent->xkey.keycode&0x7f];
+					break;
 				}
 			}
 			return 1;
@@ -472,16 +545,16 @@ int RPI_NextXEvent(XEvent* xEvent)
 			/* read scan code from stdin */
 			res = read(0, &buf[0], 1);
 			/* keep reading til there's no more*/
-			if (res > 0) 
-			{	
-				DEBUG_PRINT("keyboard input: %d, 0x%x 0x%x\n",res, buf[0], buf[1]);
+			if (res > 0)
+			{
+				DEBUG_PRINT("keyboard input: %d, 0x%x 0x%x -> SDL key %d %d\n",res, buf[0], buf[1], RAWtoSDL[buf[0]&0x7F], RAWtoSDL[buf[1]&0x7F]);
 
-				//escape key				
+				//escape key
 				if (buf[0] == 0xe0)
 				{
 					byteToRead = 1;
 					switch (buf[1]&0x7F)
-					{	
+					{
 						case 0x1d: updateState = KMOD_RCTRL; 	break;
 						case 0x38: updateState = KMOD_RALT;     break;
 						//case 0x5b: updateState = KMOD_LGUI;   break;
@@ -489,10 +562,10 @@ int RPI_NextXEvent(XEvent* xEvent)
 						default: bGotKey = 1;
 					}
 				}
-				else 
-				{	
+				else
+				{
 					switch (buf[0]&0x7F)
-					{	
+					{
 						case 0x1d: updateState = KMOD_LCTRL;  break;
 						case 0x2a: updateState = KMOD_LSHIFT; break;
 						case 0x36: updateState = KMOD_RSHIFT; break;
@@ -508,7 +581,7 @@ int RPI_NextXEvent(XEvent* xEvent)
 					if (bGotKey)
 					{
 						xEvent->type = KeyPress;
-					} 
+					}
 					else
 					{
 					 	keyState |= updateState;
@@ -526,9 +599,9 @@ int RPI_NextXEvent(XEvent* xEvent)
 					}
 				}
 
-				if (bGotKey ) 
+				if (bGotKey )
 				{
-					xEvent->xkey.keycode = buf[byteToRead]&0x7F;
+					xEvent->xkey.keycode = RAWtoSDL[buf[byteToRead]&0x7F];
 					xEvent->xkey.state = keyState;
 					return 1;
 				}
