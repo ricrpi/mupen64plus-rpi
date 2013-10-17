@@ -456,6 +456,7 @@ int RPI_NextXEvent(XEvent* xEvent)
 	}
 	else if (bRawKeyboard) // there is no X window.
 	{
+		static int keyState = 0;
 		// http://www.win.tue.nl/~aeb/linux/kbd/scancodes-1.html
 		// http://wiki.libsdl.org/SDL_Keymod?highlight=%28\bCategoryEnum\b%29|%28CategoryKeyboard%29
 
@@ -463,53 +464,79 @@ int RPI_NextXEvent(XEvent* xEvent)
 		char buf[] = {0,0};
     	int res;
 		int byteToRead =0;
+		int bGotKey = 0;
+		int updateState =0;
+		
+		while (!bGotKey)
+		{
+			/* read scan code from stdin */
+			res = read(0, &buf[0], 1);
+			/* keep reading til there's no more*/
+			if (res > 0) 
+			{	
+				DEBUG_PRINT("keyboard input: %d, 0x%x 0x%x\n",res, buf[0], buf[1]);
 
-		/* read scan code from stdin */
-		res = read(0, &buf[0], 1);
-		/* keep reading til there's no more*/
-		if (res > 0) 
-		{	
-			xEvent->xkey.state = 0;
-
-			DEBUG_PRINT("keyboard input: %d, %d %d\n",res, buf[0], buf[1]);
-			if (buf[0] == 0xe0)
-			{
-				byteToRead = 1;
-				switch (buf[1])
+				//escape key				
+				if (buf[0] == 0xe0)
+				{
+					byteToRead = 1;
+					switch (buf[1]&0x7F)
+					{	
+						case 0x1d: updateState = KMOD_RCTRL; 	break;
+						case 0x38: updateState = KMOD_RALT;     break;
+						//case 0x5b: updateState = KMOD_LGUI;   break;
+						//case 0x5c: updateState = KMOD_RGUI;   break;
+						default: bGotKey = 1;
+					}
+				}
+				else 
 				{	
-					case 0x1d: xEvent->xkey.state = KMOD_RCTRL; 	break;
-					case 0x38: xEvent->xkey.state = KMOD_RALT;     	break;
-					//case 0x5b: xEvent->xkey.state = KMOD_LGUI;    	break;
-					//case 0x5c: xEvent->xkey.state = KMOD_RGUI;    	break;
+					switch (buf[0]&0x7F)
+					{	
+						case 0x1d: updateState = KMOD_LCTRL;  break;
+						case 0x2a: updateState = KMOD_LSHIFT; break;
+						case 0x36: updateState = KMOD_RSHIFT; break;
+						case 0x38: updateState = KMOD_LALT;   break;
+						case 0x32: updateState = KMOD_CAPS;   break;
+						case 0x45: updateState = KMOD_NUM;    break;
+						default: bGotKey = 1;
+					}
 				}
 
-			} 
+				if ( buf[byteToRead] & 0x80 )
+				{
+					if (bGotKey)
+					{
+						xEvent->type = KeyPress;
+					} 
+					else
+					{
+					 	keyState |= updateState;
+					}
+				}
+				else
+				{
+					if (bGotKey)
+					{
+						xEvent->type = KeyRelease;
+					}
+					else
+					{
+						keyState ^= updateState;
+					}
+				}
 
-			if ( buf[byteToRead] & 0x80 )
-			{
-				xEvent->type = KeyPress;
+				if (bGotKey ) 
+				{
+					xEvent->xkey.keycode = buf[byteToRead]&0x7F;
+					xEvent->xkey.state = keyState;
+					return 1;
+				}
 			}
 			else
 			{
-				xEvent->type = KeyRelease;
+				return 0;
 			}
-
-			xEvent->xkey.keycode = buf[byteToRead]&0x7F;
-
-			if (0 == byteToRead)
-			{	
-				switch (buf[1]&0x7F)
-				{	
-					case 0x1d: xEvent->xkey.state = KMOD_LCTRL;   	break;
-					case 0x2a: xEvent->xkey.state = KMOD_LSHIFT; 	break;
-					case 0x36: xEvent->xkey.state = KMOD_RSHIFT;  	break;
-					case 0x38: xEvent->xkey.state = KMOD_LALT;     	break;
-					case 0x32: xEvent->xkey.state = KMOD_CAPS;   	break;
-					case 0x45: xEvent->xkey.state = KMOD_NUM;   	break;
-				}
-			}
-
-			return 1;
 		}
 	}
 	else  // remote ssh or in terminal or X window broken
