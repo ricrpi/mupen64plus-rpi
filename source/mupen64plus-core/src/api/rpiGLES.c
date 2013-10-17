@@ -477,10 +477,10 @@ int RPI_NextXEvent(XEvent* xEvent)
 				byteToRead = 1;
 				switch (buf[1])
 				{	
-					case 0x1d: xEvent->xkey.state = KMOD_RCTRL 		break;
-					case 0x38: xEvent->xkey.state = KMOD_RALT     	break;
-					case 0x5b: xEvent->xkey.state = KMOD_LGUI     	break;
-					case 0x5c: xEvent->xkey.state = KMOD_RGUI    	break;
+					case 0x1d: xEvent->xkey.state = KMOD_RCTRL; 	break;
+					case 0x38: xEvent->xkey.state = KMOD_RALT;     	break;
+					//case 0x5b: xEvent->xkey.state = KMOD_LGUI;    	break;
+					//case 0x5c: xEvent->xkey.state = KMOD_RGUI;    	break;
 				}
 
 			} 
@@ -500,10 +500,10 @@ int RPI_NextXEvent(XEvent* xEvent)
 			{	
 				switch (buf[1]&0x7F)
 				{	
-					case 0x1d: xEvent->xkey.state = KMOD_LCTRL   	break;
-					case 0x2a: xEvent->xkey.state = KMOD_LSHIFT  	break;
-					case 0x36: xEvent->xkey.state = KMOD_RSHIFT  	break;
-					case 0x38: xEvent->xkey.state = KMOD_LALT      	break;
+					case 0x1d: xEvent->xkey.state = KMOD_LCTRL;   	break;
+					case 0x2a: xEvent->xkey.state = KMOD_LSHIFT; 	break;
+					case 0x36: xEvent->xkey.state = KMOD_RSHIFT;  	break;
+					case 0x38: xEvent->xkey.state = KMOD_LALT;     	break;
 					case 0x32: xEvent->xkey.state = KMOD_CAPS;   	break;
 					case 0x45: xEvent->xkey.state = KMOD_NUM;   	break;
 				}
