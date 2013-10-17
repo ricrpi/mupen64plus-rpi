@@ -16,6 +16,8 @@
 #include <EGL/egl.h>
 #include <bcm_host.h>
 
+#include <SDL/SDL_keysym.h>
+
 #define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
 #ifndef DEBUG_PRINT
@@ -454,22 +456,36 @@ int RPI_NextXEvent(XEvent* xEvent)
 	}
 	else if (bRawKeyboard) // there is no X window.
 	{
+		// http://www.win.tue.nl/~aeb/linux/kbd/scancodes-1.html
+		// http://wiki.libsdl.org/SDL_Keymod?highlight=%28\bCategoryEnum\b%29|%28CategoryKeyboard%29
+
 		//DEBUG_PRINT("Check for keyboard event\n");
-		char buf[1];
-    		int res;
+		char buf[] = {0,0};
+    	int res;
+		int byteToRead =0;
 
 		/* read scan code from stdin */
 		res = read(0, &buf[0], 1);
 		/* keep reading til there's no more*/
 		if (res > 0) 
-		{
+		{	
+			xEvent->xkey.state = 0;
+
 			DEBUG_PRINT("keyboard input: %d, %d %d\n",res, buf[0], buf[1]);
-			if (buf[0] == 1)
+			if (buf[0] == 0xe0)
 			{
-		//		restoreKeyboard();
-		//		exit(0);
-			}
-			if ( buf[0] & 0x80 )
+				byteToRead = 1;
+				switch (buf[1])
+				{	
+					case 0x1d: xEvent->xkey.state = KMOD_RCTRL 		break;
+					case 0x38: xEvent->xkey.state = KMOD_RALT     	break;
+					case 0x5b: xEvent->xkey.state = KMOD_LGUI     	break;
+					case 0x5c: xEvent->xkey.state = KMOD_RGUI    	break;
+				}
+
+			} 
+
+			if ( buf[byteToRead] & 0x80 )
 			{
 				xEvent->type = KeyPress;
 			}
@@ -478,8 +494,21 @@ int RPI_NextXEvent(XEvent* xEvent)
 				xEvent->type = KeyRelease;
 			}
 
-			xEvent->xkey.keycode = buf[0];
-			//xEvent->xkey.state = buf[1];
+			xEvent->xkey.keycode = buf[byteToRead]&0x7F;
+
+			if (0 == byteToRead)
+			{	
+				switch (buf[1]&0x7F)
+				{	
+					case 0x1d: xEvent->xkey.state = KMOD_LCTRL   	break;
+					case 0x2a: xEvent->xkey.state = KMOD_LSHIFT  	break;
+					case 0x36: xEvent->xkey.state = KMOD_RSHIFT  	break;
+					case 0x38: xEvent->xkey.state = KMOD_LALT      	break;
+					case 0x32: xEvent->xkey.state = KMOD_CAPS;   	break;
+					case 0x45: xEvent->xkey.state = KMOD_NUM;   	break;
+				}
+			}
+
 			return 1;
 		}
 	}
