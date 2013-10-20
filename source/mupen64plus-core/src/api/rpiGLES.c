@@ -69,9 +69,43 @@ static const int RAWtoSDL[] = {
 							  //112,		113,		114,		115,		116,		117,		118,		119,
 								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
 							  //120,		121,		122,		123,		124,		125,		126,		127
+								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
+							  
+							  //Escaped Keys
+							  
+							  //0,			1,			2,			3,			4,			5,			6,			7,	
+								NA,			SDLK_ESCAPE,SDLK_1,		SDLK_2,		SDLK_3,		SDLK_4,		SDLK_5,		SDLK_6,
+							  //8,			9,			10,			11,			12,			13,			14,			15,	
+								SDLK_7,		SDLK_8,		SDLK_9,		SDLK_0,		SDLK_MINUS,	SDLK_EQUALS,SDLK_BACKSPACE,	SDLK_TAB,
+							  //16,			17,			18,			19,			20,			21,			22,			23,	
+								SDLK_q,		SDLK_w,		SDLK_e,		SDLK_r,		SDLK_t,		SDLK_y,		SDLK_u,		SDLK_i,
+							  //24,			25,			26,			27,			28,			29,			30,			31,		
+								SDLK_o,		SDLK_p,		SDLK_LEFTBRACKET,SDLK_RIGHTBRACKET,	SDLK_RETURN,NA,	SDLK_a,	SDLK_s,
+							  //32,			33,			34,			35,			36,			37,			38,			39,
+								SDLK_d,		SDLK_f,		SDLK_g,		SDLK_h,		SDLK_j,		SDLK_k,		SDLK_l,		SDLK_SEMICOLON,	
+							  //40,			41,			42,			43,			44,			45,			46,			47,
+								SDLK_AT, 	-1/*SDLK_GRAVE*/, NA,	SDLK_BACKSLASH,	SDLK_z,	SDLK_x,		SDLK_c,		SDLK_v,
+							  //48,			49,			50,			51,			52,			53,			54,			55,
+								SDLK_b,		SDLK_n,		SDLK_m,		SDLK_LESS,	SDLK_GREATER,SDLK_SLASH,NA,			SDLK_KP_MULTIPLY,
+							  //56 (0x38),	57,			58,			59,			60,			61,			62,			63,
+								NA,			SDLK_SPACE,	SDLK_CAPSLOCK,SDLK_F1,	SDLK_F2,	SDLK_F3,	SDLK_F4,	SDLK_F5,
+							  //64 (0x40),	65,			66,			67,			68,			69,			70,			71,
+								SDLK_F6,	SDLK_F7,	SDLK_F8,	SDLK_F9,	SDLK_F10,	-1/*SDLK_NUMLOCKCLEAR*/,	-1/*Ctrl-Break*/,	SDLK_HOME,	
+							  //72 (0x48),	73,			74,			75,			76,			77,			78,			79,	
+								SDLK_UP,	SDLK_PAGEUP,-1, 		SDLK_LEFT,-1, 		SDLK_RIGHT, -1,			SDLK_END,
+							  //80 (0x50),	81,			82,			83,			84,			85,			86,			87,	
+								SDLK_DOWN,	SDLK_PAGEDOWN,	SDLK_INSERT,	SDLK_KP_PERIOD,SDLK_SYSREQ,NA,		NA,			SDLK_F11,
+							  //88 (0x58),	89,			90,			91,			92,			93,			94,			95,
+								SDLK_F12,	NA,			NA,			NA,			NA,			NA,			NA,			NA,
+							  //96 (0x60),	97,			98,			99,			100,		101,		102,		103,
+								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
+							  //104,		105,		106,		107,		108,		109,		110,		111,
+								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
+							  //112,		113,		114,		115,		116,		117,		118,		119,
+								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
+							  //120,		121,		122,		123,		124,		125,		126,		127
 								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA};
 								
-
 
 static const int X11toSDL[] = { 0,			1,			2,			3,			4,			5,			6,			7,	
 								8,			SDLK_ESCAPE,			10,			11,			12,			13,			14,			15,
@@ -91,6 +125,13 @@ static const int X11toSDL[] = { 0,			1,			2,			3,			4,			5,			6,			7,
 								120,		121,		122,		123,		124,		125,		126,		127};
 
 
+typedef enum
+{
+	NOT_INIT,
+	DESKTOP,
+	CONSOLE,
+	REMOTE
+	} keyboard_mode_t;
 
 
 // Dispmanx variables
@@ -113,8 +154,9 @@ static VC_RECT_T src_rect, dest_rect;
 static unsigned int bPaused=1;
 static unsigned int bFullScreened=0;
 static uint32_t uiXflags=0; 
-static unsigned int bUsingXwindow=0;
 static void (*PauseCallback)(int) = NULL;
+
+static keyboard_mode_t key_mode; 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -128,7 +170,6 @@ static void (*PauseCallback)(int) = NULL;
 
 static struct termios tty_attr_old;
 static int old_keyboard_mode;
-static int bRawKeyboard =0;
 
 static int setupKeyboard()
 {
@@ -143,6 +184,7 @@ static int setupKeyboard()
     /* save old keyboard mode */
     if (ioctl(0, KDGKBMODE, &old_keyboard_mode) < 0) {
 	DEBUG_PRINT("Could not change keyboard mode");
+	key_mode = REMOTE;
 	return 0;
     }
 
@@ -155,15 +197,18 @@ static int setupKeyboard()
     tcsetattr(0, TCSANOW, &tty_attr);
 
     ioctl(0, KDSKBMODE, K_RAW);
-	bRawKeyboard = 1;
+	key_mode = CONSOLE;
 	DEBUG_PRINT("Setup keyboard in RAW mode\n");
     return 1;
 }
 
 static void restoreKeyboard()
 {
-    tcsetattr(0, TCSAFLUSH, &tty_attr_old);
-    ioctl(0, KDSKBMODE, old_keyboard_mode);
+	if (key_mode == CONSOLE)
+	{
+		tcsetattr(0, TCSAFLUSH, &tty_attr_old);
+		ioctl(0, KDSKBMODE, old_keyboard_mode);
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -175,7 +220,7 @@ void RPI_SetPauseCallback(void (*callback)(int))
 
 void RPI_Pause(unsigned int bPause)
 {
-	if (!bUsingXwindow) return;
+	if (key_mode != DESKTOP) return;
 
 	if (bPause && !bPaused)
 	{
@@ -230,7 +275,7 @@ static int RPI_OpenDispmanx(unsigned int uiWidth, unsigned int uiHeight)
    	src_rect.width 	= uiWidth	<< 16;
    	src_rect.height = uiHeight 	<< 16;   
 
-	if (bUsingXwindow)	//if using X11 do not go full screen. Resize will take place later
+	if (key_mode == DESKTOP)	//if using X11 do not go full screen. Resize will take place later
 	{
 		dest_rect.x = 0;
 		dest_rect.y = 0;
@@ -279,7 +324,7 @@ static int RPI_OpenXWindow(const char* sTitle, unsigned int uiWidth, unsigned in
 	XMapWindow (x_display, win);
 	XStoreName (x_display, win, sTitle);
 
-	bUsingXwindow = 1;
+	key_mode = DESKTOP;
 
 	return 0;
 }
@@ -378,7 +423,7 @@ int RPI_OpenWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeig
 
 	RPI_Pause(0);
 
-	if (!bUsingXwindow)
+	if (key_mode == CONSOLE)
 	{
 		// we want the keyboard returned to normal if something goes wrong
 		signal(SIGILL, &restKeyboard);	//illegal instruction
@@ -429,7 +474,7 @@ int RPI_FullScreen(unsigned int bFullscreen)
 
    		vc_dispmanx_update_submit_sync( dispman_update );
 	}
-	else if (bUsingXwindow)	// we can goto an X window
+	else if (key_mode == DESKTOP)	// we can goto an X window
 	{
 		bFullScreened = 0;
 		dispman_update = vc_dispmanx_update_start( 0 /* Priority*/);
@@ -449,7 +494,7 @@ int RPI_FullScreen(unsigned int bFullscreen)
 
 int RPI_ChangeTitle(const char* sTitle)
 {
-	if (!bUsingXwindow) return 1;
+	if (key_mode != DESKTOP) return 1;
 
 	DEBUG_PRINT("RPI_ChangeTitle(\"%s\")\n", sTitle);
 	XStoreName (x_display, win, sTitle);
@@ -458,14 +503,14 @@ int RPI_ChangeTitle(const char* sTitle)
 
 int RPI_CloseWindow()
 {
-	if (!bUsingXwindow) restoreKeyboard();
+	if (key_mode == CONSOLE) restoreKeyboard();
 
 	DEBUG_PRINT("RPI_CloseWindow\n");
 	eglDestroyContext ( egl_display, egl_context );
    	eglDestroySurface ( egl_display, egl_surface );
    	eglTerminate      ( egl_display );
 
-	if (bUsingXwindow)
+	if (key_mode == DESKTOP)
 	{
 		XCloseDisplay     ( x_display );
 	   	XDestroyWindow    ( x_display, root );
@@ -476,7 +521,7 @@ int RPI_CloseWindow()
 static int RPI_MoveScreen()
 {
 	//glViewport ( 0 , 0 , dest_rect.width , dest_rect.height );	//If changing the Viewport then must also change the src_rect
-	if (bUsingXwindow)
+	if (key_mode == DESKTOP)
 	{
 		dispman_update = vc_dispmanx_update_start(0);
 		DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
@@ -491,7 +536,7 @@ static int RPI_MoveScreen()
 
 int RPI_NextXEvent(XEvent* xEvent)
 {
-	if (bUsingXwindow)
+	if (key_mode == DESKTOP)
 	{
 		if (XPending ( x_display ))
 		{
@@ -532,7 +577,7 @@ int RPI_NextXEvent(XEvent* xEvent)
 			return 0;
 		}
 	}
-	else if (bRawKeyboard) // there is no X window.
+	else if (key_mode == CONSOLE) // there is no X window.
 	{
 		static int keyState = 0;
 		// http://www.win.tue.nl/~aeb/linux/kbd/scancodes-1.html
@@ -606,7 +651,7 @@ int RPI_NextXEvent(XEvent* xEvent)
 
 				if (bGotKey )
 				{
-					xEvent->xkey.keycode = RAWtoSDL[buf[byteToRead]&0x7F];
+					xEvent->xkey.keycode = RAWtoSDL[buf[byteToRead]&0x7F | byteToRead << 7];
 					xEvent->xkey.state = keyState;
 					return 1;
 				}
@@ -619,7 +664,7 @@ int RPI_NextXEvent(XEvent* xEvent)
 	}
 	else  // remote ssh or in terminal or X window broken
 	{
-		DEBUG_PRINT("Don't know how to handle input\n");
+		//DEBUG_PRINT("Don't know how to handle input\n");
 	}
 
 	//catch all
