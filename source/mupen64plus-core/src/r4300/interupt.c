@@ -27,16 +27,16 @@
 #include "api/m64p_types.h"
 #include "api/callbacks.h"
 #include "api/m64p_vidext.h"
-#include "api/rpiGLES.h"
 #include "api/vidext.h"
 #include "memory/memory.h"
 #include "main/rom.h"
 #include "main/main.h"
 #include "main/savestates.h"
 #include "main/cheat.h"
-#include "main/eventloop.h"
 #include "osd/osd.h"
 #include "plugin/plugin.h"
+#include "api/rpiGLES.h"
+#include "main/eventloop.h"
 
 #include "interupt.h"
 #include "r4300.h"
@@ -45,14 +45,22 @@
 #include "reset.h"
 #include "new_dynarec/new_dynarec.h"
 
-
 #ifdef WITH_LIRC
 #include "main/lirc.h"
 #endif
 
+#include <unistd.h>
+
+//#define DEBUG_PRINT(...) printf(__VA_ARGS__);sleep(1)
+
+
+#ifndef DEBUG_PRINT
+#define DEBUG_PRINT(...)
+#endif
+
 extern uint32_t SDL_GetTicks();
 
-#define QUEUE_SIZE	64
+#define QUEUE_SIZE	32
 
 unsigned int next_vi;
 int vi_field=0;
@@ -144,7 +152,7 @@ static int before_event(unsigned int evt1, unsigned int evt2, int type2)
     {
         if(evt2 - Count < 0x80000000)
         {
-            if((evt1 - Count) < (evt2 - Count)) return 1;
+            if(evt1 < evt2) return 1;
             else return 0;
         }
         else
@@ -176,6 +184,9 @@ void add_interupt_event(int type, unsigned int delay)
     if(type == SPECIAL_INT /*|| type == COMPARE_INT*/) special = 1;
     if(Count > 0x80000000) SPECIAL_done = 0;
    
+
+	DEBUG_PRINT("add_interupt_event(%d,%d)\n",type,delay);
+
     if (get_event(type)) {
         DebugMessage(M64MSG_WARNING, "two events of type 0x%x in interrupt queue", type);
     }
@@ -202,6 +213,7 @@ void add_interupt_event(int type, unsigned int delay)
         return;
     }
    
+//if not at end of list and (count is after next item of type or special) then get next
     while (aux->next != NULL && (!before_event(count, aux->next->count, aux->next->type) || special))
         aux = aux->next;
    
@@ -235,6 +247,8 @@ void add_interupt_event_count(int type, unsigned int count)
 
 static void remove_interupt_event(void)
 {
+	DEBUG_PRINT("remove_interupt_event %d\n",q->type);
+
     interupt_queue *aux = q->next;
     if(q->type == SPECIAL_INT) SPECIAL_done = 1;
     queue_free(q);
@@ -372,6 +386,8 @@ void init_interupt(void)
 
 void check_interupt(void)
 {
+	DEBUG_PRINT("check_interupt\n");
+
     if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
         Cause = (Cause | 0x400) & 0xFFFFFF83;
     else
@@ -401,25 +417,25 @@ void check_interupt(void)
 void X11_PumpEvents()
 {
  	XEvent  xev;
-			
+
 	while (RPI_NextXEvent(&xev) )
 	{   // check for events from the x-server
 		switch (xev.type)
-		{	
+		{
 			case MotionNotify:   // if mouse has moved
         				//xev.xmotion.x,xev.xmotion.y
-        				
-				break;         
+
+				break;
 			case ButtonPress:
 				// xev.xbutton.state, xev.xbutton.button << endl;
 				break;
 			case KeyPress:
-				event_sdl_keydown(xev.xkey.keycode, xev.xkey.state)		;
+				event_sdl_keydown(xev.xkey.keycode, xev.xkey.state);
 				break;
 			case KeyRelease:
 				event_sdl_keyup(xev.xkey.keycode, xev.xkey.state);	//TODO is this correct?
-				break;			
-			default: 
+				break;
+			default:
 				break;
 		}
 	}
@@ -428,13 +444,12 @@ void X11_PumpEvents()
 void gen_interupt(void)
 {
 	/*static int count=0, time=0;
-	count++;	
+	count++;
 
 	if (count >= 500)
 	{
 		double f = (500.0)/(SDL_GetTicks() - time);
 		DebugMessage(M64MSG_INFO, "gen_interrupt: %.3fKHz", f);
-		
 		count = 0;
 		time = SDL_GetTicks();
 	}*/
@@ -460,7 +475,7 @@ void gen_interupt(void)
             return;
         }
     }
-   
+
     if (skip_jump)
     {
         unsigned int dest = skip_jump;
@@ -470,12 +485,12 @@ void gen_interupt(void)
             next_interupt = q->count;
         else
             next_interupt = 0;
-        
+
         last_addr = dest;
         generic_jump_to(dest);
         return;
-    } 
-
+    }
+	DEBUG_PRINT("gen_interupt() %d, Count = %d\n", q->type, Count);
     switch(q->type)
     {
         case SPECIAL_INT:
@@ -500,8 +515,8 @@ void gen_interupt(void)
             lircCheckInput();
 #endif
             SDL_PumpEvents();
-	X11_PumpEvents();
-           
+X11_PumpEvents();
+
             refresh_stat();
 
             // if paused, poll for input events
@@ -513,7 +528,7 @@ void gen_interupt(void)
                 {
                     SDL_Delay(10);
                     SDL_PumpEvents();
-                    X11_PumpEvents();
+X11_PumpEvents();
 #ifdef WITH_LIRC
                     lircCheckInput();
 #endif //WITH_LIRC
@@ -536,7 +551,7 @@ void gen_interupt(void)
 
             remove_interupt_event();
             add_interupt_event_count(VI_INT, next_vi);
-    
+
             MI_register.mi_intr_reg |= 0x08;
             if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
                 Cause = (Cause | 0x400) & 0xFFFFFF83;
@@ -545,28 +560,29 @@ void gen_interupt(void)
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
             break;
-    
+
         case COMPARE_INT:
             remove_interupt_event();
             Count+=2;
             add_interupt_event_count(COMPARE_INT, Compare);
             Count-=2;
-    
+
             Cause = (Cause | 0x8000) & 0xFFFFFF83;
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
             break;
-    
+
         case CHECK_INT:
             remove_interupt_event();
             break;
-    
+
         case SI_INT:
 #ifdef WITH_LIRC
             lircCheckInput();
 #endif //WITH_LIRC
             SDL_PumpEvents();
-            PIF_RAMb[0x3F] = 0x0;
+            X11_PumpEvents();
+	    PIF_RAMb[0x3F] = 0x0;
             remove_interupt_event();
             MI_register.mi_intr_reg |= 0x02;
             si_register.si_stat |= 0x1000;
@@ -577,7 +593,6 @@ void gen_interupt(void)
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
             break;
-    
         case PI_INT:
             remove_interupt_event();
             MI_register.mi_intr_reg |= 0x10;
@@ -695,6 +710,7 @@ void gen_interupt(void)
             dyna_interp = 0;
             // set next instruction address to reset vector
             last_addr = 0xa4000040;
+			DEBUG_PRINT("generic_jump_to(0xa4000040)\n");
             generic_jump_to(0xa4000040);
             return;
 
@@ -706,6 +722,7 @@ void gen_interupt(void)
 
 #ifdef NEW_DYNAREC
     if (r4300emu == CORE_DYNAREC) {
+		DEBUG_PRINT("Setting PC for Dynarec %X\n", pcaddr);
         EPC = pcaddr;
         pcaddr = 0x80000180;
         Status |= 2;
