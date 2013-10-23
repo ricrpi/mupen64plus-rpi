@@ -13,7 +13,8 @@ static unsigned long long int StartTimes[DEPTH];
 
 static FILE * myFile = NULL;
 
-static char blanks[] = "                             ";
+//static char blanks[] = "                             ";
+static char blanks[] = "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
 
 static unsigned long long int CurrentTime();
 

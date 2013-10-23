@@ -324,7 +324,7 @@ BOOL InitConfiguration(void)
     ConfigSetDefaultInt(l_ConfigVideoRice, "RenderToTexture", TXT_BUF_NONE, "Render-to-texture emulation (0=none, 1=ignore, 2=normal, 3=write back, 4=write back and reload)");
     ConfigSetDefaultInt(l_ConfigVideoRice, "ScreenUpdateSetting", SCREEN_UPDATE_BEFORE_SCREEN_CLEAR, "Control when the screen will be updated (0=ROM default, 1=VI origin update, 2=VI origin change, 3=CI change, 4=first CI change, 5=first primitive draw, 6=before screen clear, 7=after screen drawn)");  // SCREEN_UPDATE_AT_VI_UPDATE_AND_DRAWN
     ConfigSetDefaultBool(l_ConfigVideoRice, "NormalAlphaBlender", FALSE, "Force to use normal alpha blender");
-    ConfigSetDefaultBool(l_ConfigVideoRice, "FastTextureLoading", TRUE, "Use a faster algorithm to speed up texture loading and CRC computation");
+    ConfigSetDefaultBool(l_ConfigVideoRice, "FastTextureLoading", FALSE, "Use a faster algorithm to speed up texture loading and CRC computation");
     ConfigSetDefaultBool(l_ConfigVideoRice, "AccurateTextureMapping", TRUE, "Use different texture coordinate clamping code");
     ConfigSetDefaultBool(l_ConfigVideoRice, "InN64Resolution", FALSE, "Force emulated frame buffers to be in N64 native resolution");
     ConfigSetDefaultBool(l_ConfigVideoRice, "SaveVRAM", FALSE, "Try to reduce Video RAM usage (should never be used)");

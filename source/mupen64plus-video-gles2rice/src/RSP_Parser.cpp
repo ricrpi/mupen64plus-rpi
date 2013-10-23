@@ -878,12 +878,13 @@ void DLParser_Process(OSTask * pTask)
 	Profile_end();
 
 	Profile_start("The main loop");
-        
+    unsigned int i = 0;    
 	try
     {
         // The main loop
         while( gDlistStackPointer >= 0 )
         {
+			i++;
 #ifdef DEBUGGER
             DEBUGGER_PAUSE_COUNT_N(NEXT_UCODE);
             if( debuggerPause )
@@ -918,14 +919,13 @@ void DLParser_Process(OSTask * pTask)
                 gDlistStackPointer--;
             }
         }
-
     }
     catch(...)
     {
         TRACE0("Unknown exception happens in ProcessDList");
         TriggerDPInterrupt();
     }
-	Profile_end();
+	Profile_end1(i);
     CRender::g_pRender->EndRendering();
 
     if( gRSP.ucode >= 17)

@@ -57,7 +57,7 @@ static int l_PluginInit = 0;
 
 PluginStatus  status;
 GFX_INFO      g_GraphicsInfo;
-CCritSect     g_CritialSection;
+//CCritSect     g_CritialSection;
 
 unsigned int   g_dwRamSize = 0x400000;
 unsigned int  *g_pRDRAMu32 = NULL;
@@ -116,7 +116,7 @@ static void ChangeWindowStep2()
 {
     status.bDisableFPS = true;
     windowSetting.bDisplayFullscreen = !windowSetting.bDisplayFullscreen;
-    g_CritialSection.Lock();
+    //g_CritialSection.Lock();
     windowSetting.bDisplayFullscreen = CGraphicsContext::Get()->ToggleFullscreen();
 
     CGraphicsContext::Get()->Clear(CLEAR_COLOR_AND_DEPTH_BUFFER);
@@ -125,14 +125,14 @@ static void ChangeWindowStep2()
     CGraphicsContext::Get()->UpdateFrame();
     CGraphicsContext::Get()->Clear(CLEAR_COLOR_AND_DEPTH_BUFFER);
     CGraphicsContext::Get()->UpdateFrame();
-    g_CritialSection.Unlock();
+    //g_CritialSection.Unlock();
     status.bDisableFPS = false;
     status.ToToggleFullScreen = FALSE;
 }
 
 static void ResizeStep2(void)
 {
-    g_CritialSection.Lock();
+    //g_CritialSection.Lock();
 
     // Delete all OpenGL textures
     gTextureManager.CleanUp();
@@ -155,7 +155,7 @@ static void ResizeStep2(void)
         DLParser_Init();
     }
 
-    g_CritialSection.Unlock();
+    //g_CritialSection.Unlock();
     status.ToResize = false;
 }
 
@@ -174,7 +174,7 @@ static void UpdateScreenStep2 (void)
         return;
     }
 
-    g_CritialSection.Lock();
+    //g_CritialSection.Lock();
     if( status.bHandleN64RenderTexture )
         g_pFrameBufferManager->CloseRenderTexture(true);
     
@@ -191,7 +191,7 @@ static void UpdateScreenStep2 (void)
             CRender::GetRender()->DrawFrameBuffer(true);
             CGraphicsContext::Get()->UpdateFrame();
         }
-        g_CritialSection.Unlock();
+        //g_CritialSection.Unlock();
         return;
     }
 
@@ -204,7 +204,7 @@ static void UpdateScreenStep2 (void)
         DEBUGGER_IF_DUMP( pauseAtNext, TRACE1("Update Screen: VIORIG=%08X", *g_GraphicsInfo.VI_ORIGIN_REG));
         DEBUGGER_PAUSE_COUNT_N_WITHOUT_UPDATE(NEXT_FRAME);
         DEBUGGER_PAUSE_COUNT_N_WITHOUT_UPDATE(NEXT_SET_CIMG);
-        g_CritialSection.Unlock();
+        //g_CritialSection.Unlock();
         return;
     }
 
@@ -224,7 +224,7 @@ static void UpdateScreenStep2 (void)
 
         DEBUGGER_PAUSE_COUNT_N_WITHOUT_UPDATE(NEXT_FRAME);
         DEBUGGER_PAUSE_COUNT_N_WITHOUT_UPDATE(NEXT_SET_CIMG);
-        g_CritialSection.Unlock();
+        //g_CritialSection.Unlock();
         return;
     }
 
@@ -255,7 +255,7 @@ static void UpdateScreenStep2 (void)
             DEBUGGER_PAUSE_AND_DUMP_NO_UPDATE(NEXT_FRAME, {DebuggerAppendMsg("Skip Screen Update, the same VIORIG=%08X", *g_GraphicsInfo.VI_ORIGIN_REG);});
         }
 
-        g_CritialSection.Unlock();
+        //g_CritialSection.Unlock();
         return;
     }
 
@@ -263,7 +263,7 @@ static void UpdateScreenStep2 (void)
     {
         status.bVIOriginIsUpdated=true;
         DEBUGGER_PAUSE_AND_DUMP_NO_UPDATE(NEXT_FRAME, {DebuggerAppendMsg("VI ORIG is updated to %08X", *g_GraphicsInfo.VI_ORIGIN_REG);});
-        g_CritialSection.Unlock();
+        //g_CritialSection.Unlock();
         return;
     }
 
@@ -271,12 +271,12 @@ static void UpdateScreenStep2 (void)
     DEBUGGER_PAUSE_COUNT_N_WITHOUT_UPDATE(NEXT_FRAME);
     DEBUGGER_PAUSE_COUNT_N_WITHOUT_UPDATE(NEXT_SET_CIMG);
 
-    g_CritialSection.Unlock();
+    //g_CritialSection.Unlock();
 }
 
 static void ProcessDListStep2(void)
 {
-    g_CritialSection.Lock();
+    //g_CritialSection.Lock();
     if( status.toShowCFB )
     {	
 		Profile_start("CRender::GetRender()->DrawFrameBuffer(true)");
@@ -297,7 +297,7 @@ static void ProcessDListStep2(void)
         TriggerSPInterrupt();
     }
 	Profile_end();
-    g_CritialSection.Unlock();
+    //g_CritialSection.Unlock();
 }   
 
 static bool StartVideo(void)
@@ -305,7 +305,7 @@ static bool StartVideo(void)
     windowSetting.dps = windowSetting.fps = -1;
     windowSetting.lastSecDlistCount = windowSetting.lastSecFrameCount = 0xFFFFFFFF;
 
-    g_CritialSection.Lock();
+    //g_CritialSection.Lock();
 
     memcpy(&g_curRomInfo.romheader, g_GraphicsInfo.HEADER, sizeof(ROMHeader));
     unsigned char *puc = (unsigned char *) &g_curRomInfo.romheader;
@@ -347,7 +347,7 @@ static bool StartVideo(void)
         bool res = CGraphicsContext::Get()->Initialize(640, 480, !windowSetting.bDisplayFullscreen);
         if (!res)
         {
-            g_CritialSection.Unlock();
+            //g_CritialSection.Unlock();
             return false;
         }
         CDeviceBuilder::GetBuilder()->CreateRender();
@@ -361,13 +361,13 @@ static bool StartVideo(void)
         throw 0;
     }
    
-    g_CritialSection.Unlock();
+    //g_CritialSection.Unlock();
     return true;
 }
 
 static void StopVideo()
 {
-    g_CritialSection.Lock();
+    //g_CritialSection.Lock();
     status.bGameIsRunning = false;
 
     try {
@@ -387,7 +387,7 @@ static void StopVideo()
         TRACE0("Some exceptions during RomClosed");
     }
 
-    g_CritialSection.Unlock();
+    //g_CritialSection.Unlock();
     windowSetting.dps = windowSetting.fps = -1;
     windowSetting.lastSecDlistCount = windowSetting.lastSecFrameCount = 0xFFFFFFFF;
     status.gDlistCount = status.gFrameCount = 0;
@@ -742,11 +742,11 @@ EXPORT int CALL RomOpen(void)
     /* Read RiceVideoLinux.ini file, set up internal variables by reading values from core configuration API */
     LoadConfiguration();
 
-    if( g_CritialSection.IsLocked() )
-    {
-        g_CritialSection.Unlock();
-        TRACE0("g_CritialSection is locked when game is starting, unlock it now.");
-    }
+    //if( //g_CritialSection.IsLocked() )
+    //{
+        //g_CritialSection.Unlock();
+        TRACE0("//g_CritialSection is locked when game is starting, unlock it now.");
+    //}
     status.bDisableFPS=false;
 
    g_dwRamSize = 0x800000;
@@ -769,6 +769,7 @@ EXPORT int CALL RomOpen(void)
 //---------------------------------------------------------------------------------------
 EXPORT void CALL UpdateScreen(void)
 {
+	//static bool update= true;
 	Profile_start("UpdateScreen");
 	if(options.bShowFPS)
     {
@@ -786,7 +787,10 @@ EXPORT void CALL UpdateScreen(void)
             lastTick = nowTick;
         }
     }
+	//if (!options.bSkipFrame || update) 
 	UpdateScreenStep2();
+	//update = !update;
+	
 	Profile_end();
 }
 
@@ -795,10 +799,10 @@ EXPORT void CALL UpdateScreen(void)
 EXPORT void CALL ViStatusChanged(void)
 {
 	Profile_start("ViStatusChanged");
-    g_CritialSection.Lock();
+    //g_CritialSection.Lock();
     SetVIScales();
     CRender::g_pRender->UpdateClipRectangle();
-    g_CritialSection.Unlock();
+    //g_CritialSection.Unlock();
 	Profile_end();
 }
 
@@ -806,10 +810,10 @@ EXPORT void CALL ViStatusChanged(void)
 EXPORT void CALL ViWidthChanged(void)
 {
 	Profile_start("ViWidthChanged");
-    g_CritialSection.Lock();
+    //g_CritialSection.Lock();
     SetVIScales();
     CRender::g_pRender->UpdateClipRectangle();
-    g_CritialSection.Unlock();
+    //g_CritialSection.Unlock();
 	Profile_end();
 }
 
