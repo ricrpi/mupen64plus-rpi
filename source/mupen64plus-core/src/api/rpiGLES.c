@@ -63,26 +63,26 @@ static const int RAWtoSDL[] = {
 							  //88 (0x58),	89,			90,			91,			92,			93,			94,			95,
 								SDLK_F12,	NA,			NA,			NA,			NA,			NA,			NA,			NA,
 							  //96 (0x60),	97,			98,			99,			100,		101,		102,		103,
-								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
-							  //104,		105,		106,		107,		108,		109,		110,		111,
-								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
+								NA,			NA,			NA,			NA,			NA,			NA,			NA,			SDLK_UP,
+							  //104 (0x68),		105,		106,		107,		108,		109,		110,		111,
+								NA,			SDLK_LEFT,			SDLK_RIGHT,			NA,			SDLK_DOWN,			NA,			NA,			NA,
 							  //112,		113,		114,		115,		116,		117,		118,		119,
 								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
 							  //120,		121,		122,		123,		124,		125,		126,		127
 								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
-							  
+
 							  //Escaped Keys
-							  
-							  //0,			1,			2,			3,			4,			5,			6,			7,	
+
+							  //0,			1,			2,			3,			4,			5,			6,			7,
 								NA,			SDLK_ESCAPE,SDLK_1,		SDLK_2,		SDLK_3,		SDLK_4,		SDLK_5,		SDLK_6,
-							  //8,			9,			10,			11,			12,			13,			14,			15,	
+							  //8,			9,			10,			11,			12,			13,			14,			15,
 								SDLK_7,		SDLK_8,		SDLK_9,		SDLK_0,		SDLK_MINUS,	SDLK_EQUALS,SDLK_BACKSPACE,	SDLK_TAB,
-							  //16,			17,			18,			19,			20,			21,			22,			23,	
+							  //16,			17,			18,			19,			20,			21,			22,			23,
 								SDLK_q,		SDLK_w,		SDLK_e,		SDLK_r,		SDLK_t,		SDLK_y,		SDLK_u,		SDLK_i,
-							  //24,			25,			26,			27,			28,			29,			30,			31,		
+							  //24,			25,			26,			27,			28,			29,			30,			31,
 								SDLK_o,		SDLK_p,		SDLK_LEFTBRACKET,SDLK_RIGHTBRACKET,	SDLK_RETURN,NA,	SDLK_a,	SDLK_s,
 							  //32,			33,			34,			35,			36,			37,			38,			39,
-								SDLK_d,		SDLK_f,		SDLK_g,		SDLK_h,		SDLK_j,		SDLK_k,		SDLK_l,		SDLK_SEMICOLON,	
+								SDLK_d,		SDLK_f,		SDLK_g,		SDLK_h,		SDLK_j,		SDLK_k,		SDLK_l,		SDLK_SEMICOLON,
 							  //40,			41,			42,			43,			44,			45,			46,			47,
 								SDLK_AT, 	-1/*SDLK_GRAVE*/, NA,	SDLK_BACKSLASH,	SDLK_z,	SDLK_x,		SDLK_c,		SDLK_v,
 							  //48,			49,			50,			51,			52,			53,			54,			55,
@@ -90,10 +90,10 @@ static const int RAWtoSDL[] = {
 							  //56 (0x38),	57,			58,			59,			60,			61,			62,			63,
 								NA,			SDLK_SPACE,	SDLK_CAPSLOCK,SDLK_F1,	SDLK_F2,	SDLK_F3,	SDLK_F4,	SDLK_F5,
 							  //64 (0x40),	65,			66,			67,			68,			69,			70,			71,
-								SDLK_F6,	SDLK_F7,	SDLK_F8,	SDLK_F9,	SDLK_F10,	-1/*SDLK_NUMLOCKCLEAR*/,	-1/*Ctrl-Break*/,	SDLK_HOME,	
-							  //72 (0x48),	73,			74,			75,			76,			77,			78,			79,	
+								SDLK_F6,	SDLK_F7,	SDLK_F8,	SDLK_F9,	SDLK_F10,	-1/*SDLK_NUMLOCKCLEAR*/,	-1/*Ctrl-Break*/,	SDLK_HOME,
+							  //72 (0x48),	73,			74,			75,			76,			77,			78,			79,
 								SDLK_UP,	SDLK_PAGEUP,-1, 		SDLK_LEFT,-1, 		SDLK_RIGHT, -1,			SDLK_END,
-							  //80 (0x50),	81,			82,			83,			84,			85,			86,			87,	
+							  //80 (0x50),	81,			82,			83,			84,			85,			86,			87,
 								SDLK_DOWN,	SDLK_PAGEDOWN,	SDLK_INSERT,	SDLK_KP_PERIOD,SDLK_SYSREQ,NA,		NA,			SDLK_F11,
 							  //88 (0x58),	89,			90,			91,			92,			93,			94,			95,
 								SDLK_F12,	NA,			NA,			NA,			NA,			NA,			NA,			NA,
@@ -105,19 +105,19 @@ static const int RAWtoSDL[] = {
 								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA,
 							  //120,		121,		122,		123,		124,		125,		126,		127
 								NA,			NA,			NA,			NA,			NA,			NA,			NA,			NA};
-								
 
-static const int X11toSDL[] = { 0,			1,			2,			3,			4,			5,			6,			7,	
+
+static const int X11toSDL[] = { 0,			1,			2,			3,			4,			5,			6,			7,
 								8,			SDLK_ESCAPE,			10,			11,			12,			13,			14,			15,
 								16,			17,			18,			19,			20,			21,			22,			23,
 								24,			25,			26,			27,28,			29,			30,			31,
-								32,			33,			34,			35,			36,			37,			38,			39,	
+								32,			33,			34,			35,			36,			37,			38,			39,
 								40,			41,			42,			43,			44,			45,			46,			47,
-								48,			49,			50,			51,			52,			53,			54,			55,	
+								48,			49,			50,			51,			52,			53,			54,			55,
 								56,			57,			58,			59,			60,			61,			62,			63,
-								64,			65,			66,			67,			68,			69,			70,			71,	
+								64,			65,			66,			67,			68,			69,			70,			71,
 								72,			73,			74,			75,			76,			77,			78,			79,
-								80,			81,			82,			83,			84,			85,			86,			87,	
+								80,			81,			82,			83,			84,			85,			86,			87,
 								88,			89,			90,			91,			92,			93,			94,			95,
 								96,			97,			98,			99,			100,		101,		102,		103,
 								104,		105,		106,		107,		108,		109,		110,		111,
@@ -156,7 +156,7 @@ static unsigned int bFullScreened=0;
 static uint32_t uiXflags=0; 
 static void (*PauseCallback)(int) = NULL;
 
-static keyboard_mode_t key_mode; 
+static keyboard_mode_t key_mode = NOT_INIT; 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -171,6 +171,22 @@ static keyboard_mode_t key_mode;
 static struct termios tty_attr_old;
 static int old_keyboard_mode;
 
+
+static void restoreKeyboard()
+{
+	if (key_mode == CONSOLE)
+	{
+		tcsetattr(0, TCSAFLUSH, &tty_attr_old);
+		ioctl(0, KDSKBMODE, old_keyboard_mode);
+	}
+}
+
+void restKeyboard(int val)
+{
+	DEBUG_PRINT("signal %d, restoring keyboard\n", val);
+	restoreKeyboard();
+}
+
 static int setupKeyboard()
 {
     struct termios tty_attr;
@@ -183,7 +199,7 @@ static int setupKeyboard()
 
     /* save old keyboard mode */
     if (ioctl(0, KDGKBMODE, &old_keyboard_mode) < 0) {
-	DEBUG_PRINT("Could not change keyboard mode");
+	DEBUG_PRINT("Could not change keyboard mode\n");
 	key_mode = REMOTE;
 	return 0;
     }
@@ -198,17 +214,16 @@ static int setupKeyboard()
 
     ioctl(0, KDSKBMODE, K_RAW);
 	key_mode = CONSOLE;
+
+	// we want the keyboard returned to normal if something goes wrong
+		signal(SIGILL, &restKeyboard);	//illegal instruction
+		signal(SIGTERM, &restKeyboard);	
+		signal(SIGSEGV, &restKeyboard);
+		signal(SIGINT, &restKeyboard);
+		signal(SIGQUIT, &restKeyboard);
+
 	DEBUG_PRINT("Setup keyboard in RAW mode\n");
     return 1;
-}
-
-static void restoreKeyboard()
-{
-	if (key_mode == CONSOLE)
-	{
-		tcsetattr(0, TCSAFLUSH, &tty_attr_old);
-		ioctl(0, KDSKBMODE, old_keyboard_mode);
-	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -273,7 +288,7 @@ static int RPI_OpenDispmanx(unsigned int uiWidth, unsigned int uiHeight)
    	src_rect.x 		= 0;
    	src_rect.y 		= 0;
    	src_rect.width 	= uiWidth	<< 16;
-   	src_rect.height = uiHeight 	<< 16;   
+   	src_rect.height = uiHeight 	<< 16;
 
 	if (key_mode == DESKTOP)	//if using X11 do not go full screen. Resize will take place later
 	{
@@ -304,7 +319,7 @@ static int RPI_OpenDispmanx(unsigned int uiWidth, unsigned int uiHeight)
 static int RPI_OpenXWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeight, int bFullScreen, unsigned int Xflags)
 {
 	x_display = XOpenDisplay(NULL);
-    if (NULL == x_display) return 1;
+    if (NULL == x_display)return 1;
 
 	root = DefaultRootWindow(x_display);
 	win = XCreateSimpleWindow(x_display, root, 10, 10, uiWidth, uiHeight, 0, 0, 0);
@@ -313,7 +328,7 @@ static int RPI_OpenXWindow(const char* sTitle, unsigned int uiWidth, unsigned in
 
 	XSetWindowAttributes swa;
 
-	swa.event_mask = Xflags | StructureNotifyMask 
+	swa.event_mask = Xflags | StructureNotifyMask
     // | ResizeRedirectMask | VisibilityChangeMask | ExposureMask
 	;
 	uiXflags = swa.event_mask;
@@ -355,7 +370,7 @@ static int RPI_OpenEGL_GLES2()
        	EGL_DEPTH_SIZE,     24,
        	EGL_STENCIL_SIZE,   EGL_DONT_CARE,
 		EGL_SURFACE_TYPE, 	EGL_WINDOW_BIT,
-	   //EGL_BIND_TO_TEXTURE_RGBA, EGL_TRUE, 
+	   //EGL_BIND_TO_TEXTURE_RGBA, EGL_TRUE,
 		EGL_SAMPLE_BUFFERS, 1,
 		EGL_NONE
    };
@@ -371,13 +386,13 @@ static int RPI_OpenEGL_GLES2()
       DEBUG_PRINT("Didn't get exactly one config, but %d\n",num_config);
       return 1;
    }
- 
+
    	egl_surface = eglCreateWindowSurface ( egl_display, ecfg, &nativewindow, NULL );
    	if ( egl_surface == EGL_NO_SURFACE ) {
       	DEBUG_PRINT("Unable to create EGL surface eglError: %d\n", eglGetError());
       	return 1;
    	}
- 
+
    	//// egl-contexts collect all state descriptions needed required for operation
    	EGLint ctxattr[] = {
       	EGL_CONTEXT_CLIENT_VERSION, 2,
@@ -396,11 +411,6 @@ static int RPI_OpenEGL_GLES2()
 	return 0;
 }
 
-void restKeyboard(int val)
-{
-	DEBUG_PRINT("signal %d, restoring keyboard\n", val);
-	restoreKeyboard();
-}
 
 int RPI_OpenWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeight, int bFullScreen, unsigned int Xflags)
 {
@@ -423,15 +433,8 @@ int RPI_OpenWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeig
 
 	RPI_Pause(0);
 
-	if (key_mode == CONSOLE)
+	if (key_mode == NOT_INIT)
 	{
-		// we want the keyboard returned to normal if something goes wrong
-		signal(SIGILL, &restKeyboard);	//illegal instruction
-		signal(SIGTERM, &restKeyboard);	
-		signal(SIGSEGV, &restKeyboard);
-		signal(SIGINT, &restKeyboard);
-		signal(SIGQUIT, &restKeyboard);
-
 		//change keyboard to raw mode
 		setupKeyboard();
 	}
@@ -469,7 +472,7 @@ int RPI_FullScreen(unsigned int bFullscreen)
 		dispman_update = vc_dispmanx_update_start(0);
 		DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
 
-		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 
+		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0,
 			0, 255, &dummy_rect, &src_rect, DISPMANX_PROTECTION_NONE,(DISPMANX_TRANSFORM_T)0 );
 
    		vc_dispmanx_update_submit_sync( dispman_update );
@@ -480,7 +483,7 @@ int RPI_FullScreen(unsigned int bFullscreen)
 		dispman_update = vc_dispmanx_update_start( 0 /* Priority*/);
 		DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
 
-		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 
+		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0,
 			0, 255, &dest_rect, &src_rect, DISPMANX_PROTECTION_NONE,(DISPMANX_TRANSFORM_T)0 );
 
    		vc_dispmanx_update_submit_sync( dispman_update );
@@ -526,7 +529,7 @@ static int RPI_MoveScreen()
 		dispman_update = vc_dispmanx_update_start(0);
 		DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
 
-		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 0, 255, &dest_rect, 
+		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 0, 255, &dest_rect,
 			&src_rect, DISPMANX_PROTECTION_NONE, (DISPMANX_TRANSFORM_T)0 );
 
 	   	vc_dispmanx_update_submit_sync( dispman_update );
@@ -589,7 +592,7 @@ int RPI_NextXEvent(XEvent* xEvent)
 		int byteToRead =0;
 		int bGotKey = 0;
 		int updateState =0;
-		
+
 		while (!bGotKey)
 		{
 			/* read scan code from stdin */
@@ -651,7 +654,7 @@ int RPI_NextXEvent(XEvent* xEvent)
 
 				if (bGotKey )
 				{
-					xEvent->xkey.keycode = RAWtoSDL[buf[byteToRead]&0x7F | byteToRead << 7];
+					xEvent->xkey.keycode = RAWtoSDL[ (buf[byteToRead]&0x7F) | byteToRead << 7 ];
 					xEvent->xkey.state = keyState;
 					return 1;
 				}
