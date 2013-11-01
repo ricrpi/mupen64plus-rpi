@@ -50,8 +50,14 @@
 #endif
 
 #include <unistd.h>
+#include <pthread.h>
+#include "event.h"
 
-//#define DEBUG_PRINT(...) printf(__VA_ARGS__);sleep(1)
+#include <sys/prctl.h>
+
+//#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+//;sleep(1)
+#define QUEUE_SIZE	32
 
 
 #ifndef DEBUG_PRINT
@@ -60,13 +66,32 @@
 
 extern uint32_t SDL_GetTicks();
 
-#define QUEUE_SIZE	32
+//----- Prototypes ----------------------
+
+void X11_PumpEvents();
+
+
+//----- Local Variables -----------------
+
+static pthread_mutex_t 	InterruptLock;
+
+
+static pthread_t 		SystemTimer_Thread, 	Graphics_Thread,	 DMA_Thread, 	Audio_Thread;
+
+static pthread_cond_t	SystemTimerINT;
+
+static unsigned int 	InterruptFlag;
+static int 				int_count 	= 0;
+static int 				vi_counter 	= 0;
+
+static int SPECIAL_done = 0;
+//----- Global Variables -----------------
 
 unsigned int next_vi;
 int vi_field=0;
-static int vi_counter=0;
-
 int interupt_unsafe_state = 0;
+
+//-------------------------------------------------------
 
 typedef struct _interupt_queue
 {
@@ -76,9 +101,6 @@ typedef struct _interupt_queue
 } interupt_queue;
 
 static interupt_queue *q = NULL;
-
-//-------------------------------------------------------
-
 static interupt_queue *qstack[QUEUE_SIZE];
 static unsigned int qstackindex = 0;
 static interupt_queue *qbase = NULL;
@@ -94,8 +116,8 @@ static interupt_queue* queue_malloc(size_t Bytes)
 			DebugMessage(M64MSG_VERBOSE, "/mupen64plus-core/src/4300/interupt.c: QUEUE_SIZE too small");
 			bNotified = 1;
 		}
-		
- 		return malloc(Bytes);	
+
+ 		return malloc(Bytes);
 	}
 	interupt_queue* newQueue = qstack[qstackindex];
 	qstackindex ++;
@@ -109,11 +131,11 @@ static void queue_free(interupt_queue *qToFree)
 	{
 		free(qToFree); //must be a non-stack memory allocation
  		return;
-	}	
+	}
 	/*if (qstackindex == 0 ) // should never happen
 	{
 		DebugMessage(M64MSG_ERROR, "Nothing to free");
- 		return;	
+ 		return;
 	}*/
 	qstackindex --;
 	qstack[qstackindex] = qToFree;
@@ -144,7 +166,6 @@ static void clear_queue(void)
     }
 }*/
 
-static int SPECIAL_done = 0;
 
 static int before_event(unsigned int evt1, unsigned int evt2, int type2)
 {
@@ -179,18 +200,22 @@ void add_interupt_event(int type, unsigned int delay)
 {
     unsigned int count = Count + delay/**2*/;
     int special = 0;
-    interupt_queue *aux = q;
-   
+
+pthread_mutex_lock(&InterruptLock);   
+	
+	interupt_queue *aux = q;
+
     if(type == SPECIAL_INT /*|| type == COMPARE_INT*/) special = 1;
     if(Count > 0x80000000) SPECIAL_done = 0;
-   
+
+
 
 	DEBUG_PRINT("add_interupt_event(%d,%d)\n",type,delay);
 
     if (get_event(type)) {
         DebugMessage(M64MSG_WARNING, "two events of type 0x%x in interrupt queue", type);
     }
-   
+
     if (q == NULL)
     {
         q = (interupt_queue *) queue_malloc(sizeof(interupt_queue));
@@ -199,9 +224,10 @@ void add_interupt_event(int type, unsigned int delay)
         q->type = type;
         next_interupt = q->count;
         //print_queue();
+pthread_mutex_unlock(&InterruptLock);
         return;
     }
-   
+
     if(before_event(count, q->count, q->type) && !special)
     {
         q = (interupt_queue *) queue_malloc(sizeof(interupt_queue));
@@ -210,13 +236,14 @@ void add_interupt_event(int type, unsigned int delay)
         q->type = type;
         next_interupt = q->count;
         //print_queue();
+pthread_mutex_unlock(&InterruptLock);
         return;
     }
-   
+
 //if not at end of list and (count is after next item of type or special) then get next
     while (aux->next != NULL && (!before_event(count, aux->next->count, aux->next->type) || special))
         aux = aux->next;
-   
+
     if (aux->next == NULL)
     {
         aux->next = (interupt_queue *) queue_malloc(sizeof(interupt_queue));
@@ -238,6 +265,7 @@ void add_interupt_event(int type, unsigned int delay)
         aux->count = count;
         aux->type = type;
     }
+pthread_mutex_unlock(&InterruptLock);
 }
 
 void add_interupt_event_count(int type, unsigned int count)
@@ -247,7 +275,8 @@ void add_interupt_event_count(int type, unsigned int count)
 
 static void remove_interupt_event(void)
 {
-	DEBUG_PRINT("remove_interupt_event %d\n",q->type);
+	//if (q->type == 1) printf("remove_interupt_event %d\n",q->type);
+	if (NULL == q) return;	
 
     interupt_queue *aux = q->next;
     if(q->type == SPECIAL_INT) SPECIAL_done = 1;
@@ -262,7 +291,9 @@ static void remove_interupt_event(void)
 unsigned int get_event(int type)
 {
     interupt_queue *aux = q;
-    if (q == NULL) return 0;
+    if (q == NULL){
+	 	return 0;
+	}
     if (q->type == type)
         return q->count;
     while (aux->next != NULL && aux->next->type != type)
@@ -280,9 +311,13 @@ int get_next_event_type(void)
 
 void remove_event(int type)
 {
+	//if (type == 1) printf("remove_interupt_event %d\n", type);
     interupt_queue *aux = q;
-    if (q == NULL) return;
-    if (q->type == type)
+    if (q == NULL){
+ 		return;
+    }
+
+	if (q->type == type)
     {
         aux = aux->next;
         queue_free(q);
@@ -302,6 +337,7 @@ void remove_event(int type)
 void translate_event_queue(unsigned int base)
 {
     interupt_queue *aux;
+pthread_mutex_lock(&InterruptLock);
     remove_event(COMPARE_INT);
     remove_event(SPECIAL_INT);
     aux=q;
@@ -310,6 +346,7 @@ void translate_event_queue(unsigned int base)
         aux->count = (aux->count - Count)+base;
         aux = aux->next;
     }
+pthread_mutex_unlock(&InterruptLock);
     add_interupt_event_count(COMPARE_INT, Compare);
     add_interupt_event_count(SPECIAL_INT, 0);
 }
@@ -317,6 +354,7 @@ void translate_event_queue(unsigned int base)
 int save_eventqueue_infos(char *buf)
 {
     int len = 0;
+pthread_mutex_lock(&InterruptLock);
     interupt_queue *aux = q;
     if (q == NULL)
     {
@@ -331,6 +369,7 @@ int save_eventqueue_infos(char *buf)
         aux = aux->next;
     }
     *((unsigned int*)&buf[len]) = 0xFFFFFFFF;
+pthread_mutex_unlock(&InterruptLock);
     return len+4;
 }
 
@@ -343,7 +382,7 @@ void load_eventqueue_infos(char *buf)
 	qbase = (interupt_queue *) malloc(sizeof(interupt_queue) * QUEUE_SIZE );
 	memset(qbase,0,sizeof(interupt_queue) * QUEUE_SIZE );
 	qstackindex=0;
-    
+
 	int i=0;
 
 	//load the stack with the addresses of available slots
@@ -351,7 +390,6 @@ void load_eventqueue_infos(char *buf)
 	{
 		qstack[i] = &qbase[i];
 	}
-
     while (*((unsigned int*)&buf[len]) != 0xFFFFFFFF)
     {
         int type = *((unsigned int*)&buf[len]);
@@ -361,6 +399,107 @@ void load_eventqueue_infos(char *buf)
     }
 }
 
+//------------------------ Threads ---------------------
+
+//#define NEW_METHOD
+
+static void* SystemTimer(void * args)
+{
+	struct sched_param p;
+	int pol = -1;
+//	p.sched_priority = 12;
+//	pthread_setschedparam(0,SCHED_FIFO, &p);
+
+	prctl(PR_SET_NAME,"M64P Timer",0,0,0);
+
+	pthread_getschedparam(0, &pol, &p);
+	DebugMessage(M64MSG_INFO, "Starting VI_INT thread %lu", pthread_self());
+
+	while (!stop)
+	{
+		Event_ReceiveAll(VI_INT_NEXT);
+
+		usleep(17000);	//sleep 60Hz
+
+		#ifdef NEW_METHOD
+		Event_Send(VI_INT);
+		#else
+		//add_interupt_event(VI_INT, 0);
+		#endif
+	}
+
+	vi_counter = 0; // debug
+    dyna_stop();
+	return NULL;
+}
+
+static int bDoingAudio = 0, bDoingDMA = 0;
+
+
+static void* GraphicsThread(void * args)
+{
+	/*struct sched_param p;
+	p.sched_priority = 11;
+
+	pthread_setschedparam(0, SCHED_FIFO, &p);
+*/
+	//int pol;
+	//pthread_getschedparam(0, &pol, &p);
+
+	prctl(PR_SET_NAME,"M64P Graphics",0,0,0);
+	DebugMessage(M64MSG_INFO, "Starting Graphics Thread %lu", pthread_self());
+
+	gfx.romOpen();
+	
+	usleep(100000);
+
+	Event_Send(VI_INT);
+	
+	while (!stop)
+	{
+		
+		uint32_t Flags;
+
+		Event_ReceiveAny(VI_INT_DRAW|VI_INT_DLIST, &Flags);
+		
+		if (Flags & VI_INT_DLIST)
+		{	
+			gfx.processDList();
+		}
+
+		if (Flags & VI_INT_DRAW)
+		{
+			gfx.updateScreen();
+			Event_Send(VI_INT_NEXT);
+		}		
+		
+		Event_Send(VI_INT_DONE);
+	}
+	return NULL;
+}
+/*
+static void* AudioThread(void * args)
+{
+	prctl(PR_SET_NAME,"M64P Audio",0,0,0);
+	DEBUG_PRINT("Starting AudioThread %lu\n", pthread_self());
+	while (!stop)
+	{	
+		// send audio data to buffer
+	}
+	return NULL;
+}
+
+static void* DMAThread(void * args)
+{
+	prctl(PR_SET_NAME,"M64P DMA",0,0,0);
+	DEBUG_PRINT("Starting DMAThread %lu\n", pthread_self());
+	while (!stop)
+	{
+		// do DMA transfer
+	}
+	return NULL;
+}
+*/
 void init_interupt(void)
 {
  	if (qbase != NULL) free(qbase);
@@ -375,12 +514,56 @@ void init_interupt(void)
 		qstack[i] = &qbase[i];
 	}
 
+	int e = 0;
+
+	DEBUG_PRINT("init_interupt()\n");
+ 	// create the emulated ISR in a new thread
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+
+	pthread_mutex_init(&InterruptLock,NULL);
+
+	/*
+	if ((e = pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED)))
+	{
+		DebugMessage(M64MSG_ERROR, "Failed to set attr to PTHREAD_EXPLICIT_SCHED %d", e);
+	}
+*/
+	if ((e = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)))
+	{
+		DebugMessage(M64MSG_ERROR, "Failed to set attr detachstate %d", e);
+	}
+/*
+	if ((e = pthread_attr_setschedpolicy(&attr, SCHED_FIFO)))
+	{
+		DebugMessage(M64MSG_ERROR, "Failed to set attr policy to SCHED_FIFO %d", e);
+	}
+
+	if ((e = pthread_attr_setschedparam(&attr, &p)))
+	{
+		DebugMessage(M64MSG_ERROR, "Failed to set attr param %d", e);
+	}
+*/
+	pthread_create(&SystemTimer_Thread, &attr, 	SystemTimer,	NULL);
+	pthread_create(&Graphics_Thread,	&attr,	GraphicsThread,	NULL);
+
+	//pthread_create(&Audio_Thread,		&attr,	AudioThread,	NULL);
+	//pthread_create(&DMA_Thread,			&attr,	DMAThread,		NULL);
+	usleep(10);
+	pthread_attr_destroy(&attr);
+
+	//allow thread to run and finish initializing
+	//pthread_yield();
+
+
 	SPECIAL_done = 1;
     next_vi = next_interupt = 5000;
     vi_register.vi_delay = next_vi;
     vi_field = 0;
     //clear_queue();
+#ifndef NEW_METHOD
     add_interupt_event_count(VI_INT, next_vi);
+#endif
     add_interupt_event_count(SPECIAL_INT, 0);
 }
 
@@ -395,6 +578,7 @@ void check_interupt(void)
     if ((Status & 7) != 1) return;
     if (Status & Cause & 0xFF00)
     {
+pthread_mutex_lock(&InterruptLock);
         if(q == NULL)
         {
             q = (interupt_queue *) queue_malloc(sizeof(interupt_queue));
@@ -411,6 +595,7 @@ void check_interupt(void)
             q = aux;
         }
         next_interupt = Count;
+pthread_mutex_unlock(&InterruptLock);
     }
 }
 
@@ -480,7 +665,7 @@ void gen_interupt(void)
     {
         unsigned int dest = skip_jump;
         skip_jump = 0;
-
+pthread_mutex_lock(&InterruptLock);
         if (q->count > Count || (Count - q->count) < 0x80000000)
             next_interupt = q->count;
         else
@@ -488,17 +673,91 @@ void gen_interupt(void)
 
         last_addr = dest;
         generic_jump_to(dest);
+pthread_mutex_unlock(&InterruptLock);
         return;
     }
 	DEBUG_PRINT("gen_interupt() %d, Count = %d\n", q->type, Count);
-    switch(q->type)
+
+
+
+	unsigned int Flags = 0;
+
+#ifdef NEW_METHOD
+	Event_ReceiveAnyNB(VI_INT, &Flags);
+#endif
+
+	if (Flags & VI_INT)
+	{
+		if(vi_counter < 60)
+        {
+            if (vi_counter == 0)
+                cheat_apply_cheats(ENTRY_BOOT);
+            vi_counter++;
+        }
+        else
+        {
+            cheat_apply_cheats(ENTRY_VI);
+        }
+
+		//let the graphics thread start
+		Event_Send(VI_INT_DRAW);
+
+		SDL_PumpEvents();
+		X11_PumpEvents();
+
+        refresh_stat();
+
+        // if paused, poll for input events
+        if(rompause)
+        {
+            osd_render();  // draw Paused message in case gfx.updateScreen didn't do it
+            //VidExt_GL_SwapBuffers(); - Not going to work with graphics in other thread!
+            while(rompause)
+            {
+                SDL_Delay(10);
+                SDL_PumpEvents();
+				X11_PumpEvents();
+            }
+        }
+
+        Event_ReceiveAll(VI_INT_DONE);
+
+        new_vi();
+        if (vi_register.vi_v_sync == 0)
+		{
+			vi_register.vi_delay = 500000;
+		}
+        else 
+		{
+			vi_register.vi_delay = ((vi_register.vi_v_sync + 1)*1500);
+		}
+
+        next_vi += vi_register.vi_delay;
+        if (vi_register.vi_status&0x40) vi_field=1-vi_field;
+        else vi_field=0;
+
+		MI_register.mi_intr_reg |= 0x08;
+        if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
+            Cause = (Cause | 0x400) & 0xFFFFFF83;
+        else
+            return;
+        if ((Status & 7) != 1) return;
+        if (!(Status & Cause & 0xFF00)) return;
+	}
+	else 
+	{
+
+pthread_mutex_lock(&InterruptLock);
+	switch(q->type)
     {
         case SPECIAL_INT:
             if (Count > 0x10000000) return;
             remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
             add_interupt_event_count(SPECIAL_INT, 0);
             return;
             break;
+#ifndef NEW_METHOD
         case VI_INT:
             if(vi_counter < 60)
             {
@@ -510,12 +769,14 @@ void gen_interupt(void)
             {
                 cheat_apply_cheats(ENTRY_VI);
             }
-            gfx.updateScreen();
-#ifdef WITH_LIRC
-            lircCheckInput();
-#endif
-            SDL_PumpEvents();
-X11_PumpEvents();
+            
+			remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
+			//let the graphics thread start
+			Event_Send(VI_INT_DRAW);
+
+			SDL_PumpEvents();
+			X11_PumpEvents();
 
             refresh_stat();
 
@@ -523,17 +784,19 @@ X11_PumpEvents();
             if(rompause)
             {
                 osd_render();  // draw Paused message in case gfx.updateScreen didn't do it
-                VidExt_GL_SwapBuffers();
+                //VidExt_GL_SwapBuffers(); - Not going to work with graphics in other thread!
                 while(rompause)
                 {
                     SDL_Delay(10);
                     SDL_PumpEvents();
-X11_PumpEvents();
+					X11_PumpEvents();
 #ifdef WITH_LIRC
                     lircCheckInput();
 #endif //WITH_LIRC
                 }
             }
+
+            Event_ReceiveAll(VI_INT_DONE);
 
             new_vi();
             if (vi_register.vi_v_sync == 0)
@@ -549,10 +812,9 @@ X11_PumpEvents();
             if (vi_register.vi_status&0x40) vi_field=1-vi_field;
             else vi_field=0;
 
-            remove_interupt_event();
             add_interupt_event_count(VI_INT, next_vi);
 
-            MI_register.mi_intr_reg |= 0x08;
+			MI_register.mi_intr_reg |= 0x08;
             if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
                 Cause = (Cause | 0x400) & 0xFFFFFF83;
             else
@@ -560,9 +822,10 @@ X11_PumpEvents();
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
             break;
-
+#endif
         case COMPARE_INT:
             remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
             Count+=2;
             add_interupt_event_count(COMPARE_INT, Compare);
             Count-=2;
@@ -574,6 +837,7 @@ X11_PumpEvents();
 
         case CHECK_INT:
             remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
             break;
 
         case SI_INT:
@@ -584,6 +848,7 @@ X11_PumpEvents();
             X11_PumpEvents();
 	    PIF_RAMb[0x3F] = 0x0;
             remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
             MI_register.mi_intr_reg |= 0x02;
             si_register.si_stat |= 0x1000;
             if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
@@ -595,6 +860,7 @@ X11_PumpEvents();
             break;
         case PI_INT:
             remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
             MI_register.mi_intr_reg |= 0x10;
             pi_register.read_pi_status_reg &= ~3;
             if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
@@ -604,17 +870,18 @@ X11_PumpEvents();
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
             break;
-    
+
         case AI_INT:
             if (ai_register.ai_status & 0x80000000) // full
             {
                 unsigned int ai_event = get_event(AI_INT);
                 remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
                 ai_register.ai_status &= ~0x80000000;
                 ai_register.current_delay = ai_register.next_delay;
                 ai_register.current_len = ai_register.next_len;
                 add_interupt_event_count(AI_INT, ai_event+ai_register.next_delay);
-         
+
                 MI_register.mi_intr_reg |= 0x04;
                 if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
                     Cause = (Cause | 0x400) & 0xFFFFFF83;
@@ -626,6 +893,7 @@ X11_PumpEvents();
             else
             {
                 remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
                 ai_register.ai_status &= ~0x40000000;
 
                 //-------
@@ -641,9 +909,10 @@ X11_PumpEvents();
 
         case SP_INT:
             remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
             sp_register.sp_status_reg |= 0x203;
             // sp_register.sp_status_reg |= 0x303;
-    
+
             if (!(sp_register.sp_status_reg & 0x40)) return; // !intr_on_break
             MI_register.mi_intr_reg |= 0x01;
             if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
@@ -653,9 +922,10 @@ X11_PumpEvents();
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
             break;
-    
+
         case DP_INT:
             remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
             dpc_register.dpc_status &= ~2;
             dpc_register.dpc_status |= 0x81;
             MI_register.mi_intr_reg |= 0x20;
@@ -681,6 +951,7 @@ X11_PumpEvents();
         case NMI_INT:
             // Non Maskable Interrupt -- remove interrupt event from queue
             remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
             // setup r4300 Status flags: reset TS and SR, set BEV, ERL, and SR
             Status = (Status & ~0x00380000) | 0x00500004;
             Cause  = 0x00000000;
@@ -717,8 +988,10 @@ X11_PumpEvents();
         default:
             DebugMessage(M64MSG_ERROR, "Unknown interrupt queue event type %.8X.", q->type);
             remove_interupt_event();
+pthread_mutex_unlock(&InterruptLock);
             break;
     }
+	}
 
 #ifdef NEW_DYNAREC
     if (r4300emu == CORE_DYNAREC) {

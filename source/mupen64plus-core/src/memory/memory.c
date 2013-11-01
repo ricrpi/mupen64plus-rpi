@@ -48,6 +48,7 @@
 #include "osal/preproc.h"
 #include "plugin/plugin.h"
 #include "r4300/new_dynarec/new_dynarec.h"
+#include "r4300/event.h"
 
 #ifdef DBG
 #include "debugger/dbg_types.h"
@@ -1260,7 +1261,8 @@ static void do_SP_Task(void)
                 }
             }
         }
-
+		Event_Send(VI_INT_DLIST);
+		Event_ReceiveAll(VI_INT_DONE);
         //gfx.processDList();
         rsp_register.rsp_pc &= 0xFFF;
         start_section(GFX_SECTION);

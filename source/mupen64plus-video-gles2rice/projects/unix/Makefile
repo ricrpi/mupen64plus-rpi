@@ -280,7 +280,7 @@ LINK.o = $(Q_LD)$(CXX) $(CXXFLAGS) $(LDFLAGS) $(TARGET_ARCH)
 # set special flags for given Makefile parameters
 ifeq ($(DEBUG),1)
   #CFLAGS += -g
-	CFLAGS+= -DOPENGL_DEBUG -DTIME_PROFILE
+	CFLAGS+= -O0 -DOPENGL_DEBUG -DTIME_PROFILE
   INSTALL_STRIP_FLAG ?= 
 else
   CFLAGS += -O3 #-DTIME_PROFILE

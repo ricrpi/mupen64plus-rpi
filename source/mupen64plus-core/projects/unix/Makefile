@@ -407,6 +407,7 @@ SOURCE = \
 	$(SRCDIR)/plugin/dummy_audio.c \
 	$(SRCDIR)/plugin/dummy_input.c \
 	$(SRCDIR)/plugin/dummy_rsp.c \
+	$(SRCDIR)/r4300/event.c \
 	$(SRCDIR)/r4300/r4300.c \
 	$(SRCDIR)/r4300/exception.c \
 	$(SRCDIR)/r4300/interupt.c \

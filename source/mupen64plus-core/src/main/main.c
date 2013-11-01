@@ -60,6 +60,9 @@
 #include <sched.h>
 #include <errno.h>
 
+#include <pthread.h>
+
+
 #ifdef DBG
 #include "debugger/dbg_types.h"
 #include "debugger/debugger.h"
@@ -639,7 +642,8 @@ m64p_error main_reset(int do_hard_reset)
 
 static void video_plugin_render_callback(int bScreenRedrawn)
 {
-    int bOSD = ConfigGetParamBool(g_CoreConfig, "OnScreenDisplay");
+    static int bOSD = -1; 
+	if (bOSD == -1 ) bOSD = ConfigGetParamBool(g_CoreConfig, "OnScreenDisplay");
 
     // if the flag is set to take a screenshot, then grab it now
     if (l_TakeScreenshot != 0)
@@ -649,7 +653,7 @@ static void video_plugin_render_callback(int bScreenRedrawn)
 //        if (!bOSD || bScreenRedrawn)
 		if (bScreenRedrawn)
         {
-            TakeScreenshot(l_TakeScreenshot - 1);  // current frame number +1 is in l_TakeScreenshot
+			TakeScreenshot(l_TakeScreenshot - 1);  // current frame number +1 is in l_TakeScreenshot
             l_TakeScreenshot = 0; // reset flag
         }
     }
@@ -735,9 +739,11 @@ m64p_error main_run(void)
 {
     /* take the r4300 emulator mode from the config file at this point and cache it in a global variable */
     r4300emu = ConfigGetParamInt(g_CoreConfig, "R4300Emulator");
-	uint32_t SchedulerPriority = ConfigGetParamInt(g_CoreConfig, "Scheduler");
-	
-	if (SchedulerPriority > 0)
+	//uint32_t SchedulerPriority = ConfigGetParamInt(g_CoreConfig, "Scheduler");
+
+	DebugMessage(M64MSG_INFO,"Core Thred id is %lu", pthread_self());	
+
+	/*if (SchedulerPriority > 0)
 	{
 		if (SchedulerPriority > sched_get_priority_max(SCHED_FIFO)) SchedulerPriority = 20;
 
@@ -769,7 +775,7 @@ m64p_error main_run(void)
 		}
 		
 		
-	}
+	}*/
 
     /* set some other core parameters based on the config file values */
     savestates_set_autoinc_slot(ConfigGetParamBool(g_CoreConfig, "AutoStateSlotIncrement"));
@@ -788,10 +794,10 @@ m64p_error main_run(void)
     }
 
     // Attach rom to plugins
-    if (!gfx.romOpen())
-    {
-        free_memory(); return M64ERR_PLUGIN_FAIL;
-    }
+ //   if (!gfx.romOpen())
+//    {
+ //       free_memory(); return M64ERR_PLUGIN_FAIL;
+//    }
     if (!audio.romOpen())
     {
         gfx.romClosed(); free_memory(); return M64ERR_PLUGIN_FAIL;

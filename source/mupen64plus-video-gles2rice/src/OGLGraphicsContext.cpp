@@ -94,7 +94,7 @@ bool COGLGraphicsContext::Initialize(uint32 dwWidth, uint32 dwHeight, BOOL bWind
 
     // init sdl & gl
     DebugMessage(M64MSG_VERBOSE, "Initializing video subsystem...");
-    if (CoreVideo_Init() != M64ERR_SUCCESS)   
+    if (CoreVideo_Init() != M64ERR_SUCCESS)
         return false;
 
     /* hard-coded attribute values */
@@ -172,10 +172,10 @@ bool COGLGraphicsContext::Initialize(uint32 dwWidth, uint32 dwHeight, BOOL bWind
     Unlock();
 
     Clear(CLEAR_COLOR_AND_DEPTH_BUFFER);    // Clear buffers
+	UpdateFrame();
+	Clear(CLEAR_COLOR_AND_DEPTH_BUFFER);
     UpdateFrame();
-    Clear(CLEAR_COLOR_AND_DEPTH_BUFFER);
-    UpdateFrame();
-    
+
     m_bReady = true;
     status.isVertexShaderEnabled = false;
 
@@ -231,7 +231,7 @@ bool COGLGraphicsContext::ResizeInitialize(uint32 dwWidth, uint32 dwHeight, BOOL
     UpdateFrame();
     Clear(CLEAR_COLOR_AND_DEPTH_BUFFER);
     UpdateFrame();
-    
+
     return true;
 }
 
@@ -259,13 +259,13 @@ void COGLGraphicsContext::InitState(void)
     //glMatrixMode(GL_MODELVIEW);
     //glLoadIdentity();
 
-    glDisable(GL_ALPHA_TEST);
+    gl_Disable(GL_ALPHA_TEST);
     OPENGL_CHECK_ERRORS;
 #endif
 
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     OPENGL_CHECK_ERRORS;
-    glDisable(GL_BLEND);
+    gl_Disable(GL_BLEND);
     OPENGL_CHECK_ERRORS;
 
     glFrontFace(GL_CCW);
@@ -280,7 +280,7 @@ void COGLGraphicsContext::InitState(void)
     OPENGL_CHECK_ERRORS;
     glDepthFunc(GL_LEQUAL);
     OPENGL_CHECK_ERRORS;
-    
+
 
 #if SDL_VIDEO_OPENGL
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
@@ -297,7 +297,7 @@ void COGLGraphicsContext::InitState(void)
     OPENGL_CHECK_ERRORS;
     glLoadIdentity();
     OPENGL_CHECK_ERRORS;
-    
+
     glDepthRange(-1, 1);
 
 #elif SDL_VIDEO_OPENGL_ES2
@@ -312,7 +312,7 @@ void COGLGraphicsContext::InitOGLExtension(void)
     // important extension features, it is very bad not to have these feature
     m_bSupportMultiTexture = IsExtensionSupported(OSAL_GL_ARB_MULTITEXTURE);
     m_bSupportTextureEnvCombine = IsExtensionSupported("GL_EXT_texture_env_combine");
-    
+
     m_bSupportSeparateSpecularColor = IsExtensionSupported("GL_EXT_separate_specular_color");
     m_bSupportSecondColor = IsExtensionSupported("GL_EXT_secondary_color");
     m_bSupportFogCoord = IsExtensionSupported("GL_EXT_fog_coord");
@@ -463,7 +463,6 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
         }
     */
 
-   
    // if emulator defined a render callback function, call it before buffer swap
    if(renderCallback)
        (*renderCallback)(status.bScreenIsDrawn);
@@ -471,11 +470,11 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
 
 
    if (status.bScreenIsDrawn)
-	{ 
-		Profile_start("CoreVideo_GL_SwapBuffers()");		
+	{
+		Profile_start("CoreVideo_GL_SwapBuffers()");
 		CoreVideo_GL_SwapBuffers();
 		Profile_end();
- 	}  
+ 	}
    /*if(options.bShowFPS)
      {
     static unsigned int lastTick=0;
@@ -491,10 +490,11 @@ void COGLGraphicsContext::UpdateFrame(bool swaponly)
          lastTick = nowTick;
       }
      }*/
-Profile_start("glEnable(GL_DEPTH_TEST)");	
+
+Profile_start("gl_Enable(GL_DEPTH_TEST)");
     glEnable(GL_DEPTH_TEST);
 	OPENGL_CHECK_ERRORS;
-Profile_end();	
+Profile_end();
 
 	Profile_start("glDepthMask(GL_TRUE)");
 	glDepthMask(GL_TRUE);
@@ -503,7 +503,7 @@ Profile_end();
 
 Profile_start("glClearDepth(1.0f)");
     glClearDepth(1.0f);
-	OPENGL_CHECK_ERRORS;	
+	OPENGL_CHECK_ERRORS;
 	Profile_end();
 
 Profile_start("glClear()");

@@ -177,14 +177,14 @@ static void UpdateScreenStep2 (void)
     //g_CritialSection.Lock();
     if( status.bHandleN64RenderTexture )
         g_pFrameBufferManager->CloseRenderTexture(true);
-    
+
     g_pFrameBufferManager->SetAddrBeDisplayed(*g_GraphicsInfo.VI_ORIGIN_REG);
 
 	if( status.gDlistCount == 0 )
     {
 		uint32 width = *g_GraphicsInfo.VI_WIDTH_REG;
 		// CPU frame buffer update
-        
+
         if( ((*g_GraphicsInfo.VI_ORIGIN_REG & (g_dwRamSize-1) ) > width*2) && (*g_GraphicsInfo.VI_H_START_REG != 0) && (width != 0) )
         {
             SetVIScales();
@@ -278,7 +278,7 @@ static void ProcessDListStep2(void)
 {
     //g_CritialSection.Lock();
     if( status.toShowCFB )
-    {	
+    {
 		Profile_start("CRender::GetRender()->DrawFrameBuffer(true)");
         CRender::GetRender()->DrawFrameBuffer(true);
         status.toShowCFB = false;
@@ -298,7 +298,7 @@ static void ProcessDListStep2(void)
     }
 	Profile_end();
     //g_CritialSection.Unlock();
-}   
+}
 
 static bool StartVideo(void)
 {
@@ -336,11 +336,12 @@ static bool StartVideo(void)
     if( status.dwTvSystem == TV_SYSTEM_NTSC )
         status.fRatio = 0.75f;
     else
-        status.fRatio = 9/11.0f;;
-    
+        status.fRatio = 9/11.0f;
+
     InitExternalTextures();
 
     try {
+
         CDeviceBuilder::GetBuilder()->CreateGraphicsContext();
         CGraphicsContext::InitWindowInfo();
 
@@ -350,8 +351,11 @@ static bool StartVideo(void)
             //g_CritialSection.Unlock();
             return false;
         }
+
         CDeviceBuilder::GetBuilder()->CreateRender();
+
         CRender::GetRender()->Initialize();
+
         DLParser_Init();
         status.bGameIsRunning = true;
     }
@@ -360,7 +364,7 @@ static bool StartVideo(void)
         DebugMessage(M64MSG_ERROR, "Exception caught while starting video renderer");
         throw 0;
     }
-   
+
     //g_CritialSection.Unlock();
     return true;
 }
@@ -462,7 +466,7 @@ void SetVIScales()
                 }
                 */
             }
-            
+
             if( windowSetting.fViHeight<100 || windowSetting.fViWidth<100 )
             {
                 //At sometime, value in VI_H_START_REG or VI_V_START_REG are 0
@@ -672,7 +676,6 @@ EXPORT m64p_error CALL PluginShutdown(void)
     {
         RomClosed();
 		Profile_close();
-		
     }
     if (bIniIsChanged)
     {
@@ -699,7 +702,7 @@ EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType, int *Plugi
 
     if (APIVersion != NULL)
         *APIVersion = VIDEO_PLUGIN_API_VERSION;
-    
+
     if (PluginNamePtr != NULL)
         *PluginNamePtr = PLUGIN_NAME;
 
@@ -707,7 +710,7 @@ EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType, int *Plugi
     {
         *Capabilities = 0;
     }
-                    
+
     return M64ERR_SUCCESS;
 }
 
@@ -750,7 +753,7 @@ EXPORT int CALL RomOpen(void)
     status.bDisableFPS=false;
 
    g_dwRamSize = 0x800000;
-    
+
 #ifdef DEBUGGER
     if( debuggerPause )
     {
@@ -769,28 +772,31 @@ EXPORT int CALL RomOpen(void)
 //---------------------------------------------------------------------------------------
 EXPORT void CALL UpdateScreen(void)
 {
-	//static bool update= true;
+	static bool update= true;
 	Profile_start("UpdateScreen");
-	if(options.bShowFPS)
-    {
-        static unsigned int lastTick=0;
-        static int frames=0;
-        unsigned int nowTick = SDL_GetTicks();
-        frames++;
-        if(lastTick + 5000 <= nowTick)
-        {
-            char caption[200];
-            sprintf(caption, "%s v%i.%i.%i - %.3f VI/S", PLUGIN_NAME, VERSION_PRINTF_SPLIT(PLUGIN_VERSION), frames/5.0);
-            DebugMessage(M64MSG_INFO, "%s", caption);
-			CoreVideo_SetCaption(caption);
-            frames = 0;
-            lastTick = nowTick;
-        }
-    }
-	//if (!options.bSkipFrame || update) 
-	UpdateScreenStep2();
+
+	if (!options.bSkipFrame || update)
+	{
+		if(options.bShowFPS)
+    	{
+		    static unsigned int lastTick=0;
+		    static int frames=0;
+		    unsigned int nowTick = SDL_GetTicks();
+		    frames++;
+		    if(lastTick + 5000 <= nowTick)
+		    {
+		        char caption[200];
+		        sprintf(caption, "%s v%i.%i.%i - %.3f VI/S", PLUGIN_NAME, VERSION_PRINTF_SPLIT(PLUGIN_VERSION), frames/5.0);
+		        DebugMessage(M64MSG_INFO, "%s", caption);
+				CoreVideo_SetCaption(caption);
+		        frames = 0;
+		        lastTick = nowTick;
+		    }
+		}
+		UpdateScreenStep2();
+	}
+
 	//update = !update;
-	
 	Profile_end();
 }
 

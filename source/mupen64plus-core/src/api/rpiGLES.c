@@ -17,6 +17,7 @@
 #include <bcm_host.h>
 
 #include <SDL/SDL_keysym.h>
+#include <pthread.h>
 
 #define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
@@ -191,6 +192,8 @@ static int setupKeyboard()
 {
     struct termios tty_attr;
     int flags;
+
+	return 0;
 
     /* make stdin non-blocking */
     flags = fcntl(0, F_GETFL);
@@ -414,7 +417,7 @@ static int RPI_OpenEGL_GLES2()
 
 int RPI_OpenWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeight, int bFullScreen, unsigned int Xflags)
 {
-	DEBUG_PRINT("RPI_OpenWindow(\"%s\", %d, %d)\n", sTitle, uiWidth, uiHeight);
+	DEBUG_PRINT("RPI_OpenWindow(\"%s\", %d, %lu) on thread %d\n", sTitle, uiWidth, uiHeight,pthread_self());
 
 	if ( 0 < RPI_OpenXWindow(sTitle, uiWidth, uiHeight, bFullScreen, Xflags))
 	{
