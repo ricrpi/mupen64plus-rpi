@@ -750,7 +750,9 @@ EXPORT void CALL AiLenChanged( void )
 			uint32_t latency = audioplay_get_latency(st);
 		
 			if (latency < uiLatency) //sanity check
-				inc = ((oldsamplerate << 10) * uiLatency) / (newsamplerate * (2 * uiLatency - latency));			
+				inc = ((oldsamplerate << 10) * uiLatency) / (newsamplerate * (2 * uiLatency - latency));
+						
+			if ((inc >> 10) < 1) inc = ((oldsamplerate << 10) / newsamplerate);
 		}
 	#if 1
 		uint32_t j = 0;
