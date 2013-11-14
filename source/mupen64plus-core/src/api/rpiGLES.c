@@ -417,7 +417,7 @@ static int RPI_OpenEGL_GLES2()
 
 int RPI_OpenWindow(const char* sTitle, unsigned int uiWidth, unsigned int uiHeight, int bFullScreen, unsigned int Xflags)
 {
-	DEBUG_PRINT("RPI_OpenWindow(\"%s\", %d, %lu) on thread %d\n", sTitle, uiWidth, uiHeight,pthread_self());
+	DEBUG_PRINT("RPI_OpenWindow(\"%s\", %d, %d) on thread %lu\n", sTitle, uiWidth, uiHeight,pthread_self());
 
 	if ( 0 < RPI_OpenXWindow(sTitle, uiWidth, uiHeight, bFullScreen, Xflags))
 	{

@@ -55,14 +55,17 @@
 
 #include <sys/prctl.h>
 
-//#define DEBUG_PRINT(...) printf(__VA_ARGS__)
-//;sleep(1)
+//#define DEBUG_PRINT(...) printf(__VA_ARGS__);
 #define QUEUE_SIZE	32
 
 
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT(...)
 #endif
+
+mt_thread mt_s, mt_vi, mt_ai, mt_pi, mt_si, mt_dp, mt_sp, mt_nmi, mt_hw2;
+mt_options mt_o;
+
 
 extern uint32_t SDL_GetTicks();
 
@@ -76,9 +79,8 @@ void X11_PumpEvents();
 static pthread_mutex_t 	InterruptLock;
 
 
-static pthread_t 		SystemTimer_Thread, 	Graphics_Thread,	 DMA_Thread, 	Audio_Thread;
-
-static pthread_cond_t	SystemTimerINT;
+static pthread_t 		SystemTimer_Thread, 	Graphics_Timer_Thread;
+static pthread_t		Graphics_Thread,	PI_Thread, 	SI_Thread, DP_Thread, SP_Thread, HW2_Thread, Audio_Thread;
 
 static unsigned int 	InterruptFlag;
 static int 				int_count 	= 0;
@@ -201,19 +203,17 @@ void add_interupt_event(int type, unsigned int delay)
     unsigned int count = Count + delay/**2*/;
     int special = 0;
 
-pthread_mutex_lock(&InterruptLock);   
-	
+pthread_mutex_lock(&InterruptLock);
+
 	interupt_queue *aux = q;
 
     if(type == SPECIAL_INT /*|| type == COMPARE_INT*/) special = 1;
     if(Count > 0x80000000) SPECIAL_done = 0;
 
-
-
-	DEBUG_PRINT("add_interupt_event(%d,%d)\n",type,delay);
+	if(mt_s.bPrintDMsg) printf("add_interupt_event(0x%X, %d), Count = %d\n",type, delay, Count);
 
     if (get_event(type)) {
-        DebugMessage(M64MSG_WARNING, "two events of type 0x%x in interrupt queue", type);
+        DebugMessage(M64MSG_WARNING, "two events of type 0x%X in interrupt queue", type);
     }
 
     if (q == NULL)
@@ -275,8 +275,8 @@ void add_interupt_event_count(int type, unsigned int count)
 
 static void remove_interupt_event(void)
 {
-	//if (q->type == 1) printf("remove_interupt_event %d\n",q->type);
-	if (NULL == q) return;	
+	if(mt_s.bPrintDMsg) printf("remove_interupt_event 0x%X, Count = %d\n", q->type, Count);
+	if (NULL == q) return;
 
     interupt_queue *aux = q->next;
     if(q->type == SPECIAL_INT) SPECIAL_done = 1;
@@ -317,11 +317,12 @@ void remove_event(int type)
  		return;
     }
 
-	if (q->type == type)
+    if (q->type == type)
     {
         aux = aux->next;
         queue_free(q);
         q = aux;
+		if(mt_s.bPrintDMsg) printf("remove_event(0x%X), Count = %d\n", type, Count);
         return;
     }
     while (aux->next != NULL && aux->next->type != type)
@@ -331,6 +332,7 @@ void remove_event(int type)
         interupt_queue *aux2 = aux->next->next;
         queue_free(aux->next);
         aux->next = aux2;
+		if(mt_s.bPrintDMsg) printf("remove_event(0x%X), Count = %d\n", type, Count);
     }
 }
 
@@ -401,105 +403,210 @@ void load_eventqueue_infos(char *buf)
 
 //------------------------ Threads ---------------------
 
-//#define NEW_METHOD
-
 static void* SystemTimer(void * args)
 {
 	struct sched_param p;
 	int pol = -1;
-//	p.sched_priority = 12;
-//	pthread_setschedparam(0,SCHED_FIFO, &p);
+
+	p.sched_priority = mt_s.uiPriority;
+	pthread_setschedparam(0,SCHED_FIFO, &p);
 
 	prctl(PR_SET_NAME,"M64P Timer",0,0,0);
 
 	pthread_getschedparam(0, &pol, &p);
-	DebugMessage(M64MSG_INFO, "Starting VI_INT thread %lu", pthread_self());
+	if(mt_s.bPrintDMsg) printf("Starting SysTimer thread %lu", pthread_self());
 
-	while (!stop)
-	{
-		Event_ReceiveAll(VI_INT_NEXT);
+	if (mt_s.bUseEvents){
+		while (!stop)
+		{
+			_gen_interupt();
+			usleep(mt_s.uiWait);	//sleep 500KHz
+		}
 
-		usleep(17000);	//sleep 60Hz
-
-		#ifdef NEW_METHOD
-		Event_Send(VI_INT);
-		#else
-		//add_interupt_event(VI_INT, 0);
-		#endif
+		vi_counter = 0; // debug
+		dyna_stop();
 	}
-
-	vi_counter = 0; // debug
-    dyna_stop();
 	return NULL;
 }
 
-static int bDoingAudio = 0, bDoingDMA = 0;
+static void* GraphicsTimer(void * args)
+{
+	struct sched_param p;
+	int pol = -1;
+	p.sched_priority = mt_vi.uiPriority;
+	pthread_setschedparam(0,SCHED_FIFO, &p);
 
+	prctl(PR_SET_NAME,"M64P Gfx Timer",0,0,0);
+
+	pthread_getschedparam(0, &pol, &p);
+	if(mt_vi.bPrintDMsg) printf("Starting GFX Timer Thread %lu", pthread_self());
+
+	//sleep(10);
+	if (mt_vi.bUseEvents) Event_Send(VI_INT);
+
+	while (!stop)
+	{
+		Event_ReceiveAll(VI_INT_PENDING);
+
+		usleep(mt_vi.uiWait);	//sleep 60Hz
+		if(mt_vi.bPrintDMsg) printf("send Event VI_INT, Count = %d\n", Count);
+		if (mt_vi.bUseEvents)	Event_Send(VI_INT);
+		else add_interupt_event(VI_INT, 500000);
+	}
+
+	return NULL;
+}
 
 static void* GraphicsThread(void * args)
 {
-	/*struct sched_param p;
-	p.sched_priority = 11;
+	struct sched_param p;
+	p.sched_priority = mt_vi.uiPriority;
+	pthread_setschedparam(0,SCHED_FIFO, &p);
 
-	pthread_setschedparam(0, SCHED_FIFO, &p);
-*/
-	//int pol;
-	//pthread_getschedparam(0, &pol, &p);
 
 	prctl(PR_SET_NAME,"M64P Graphics",0,0,0);
-	DebugMessage(M64MSG_INFO, "Starting Graphics Thread %lu", pthread_self());
+	if(mt_vi.bPrintDMsg) printf("Starting Graphics Thread %lu", pthread_self());
 
 	gfx.romOpen();
-	
-	usleep(100000);
 
-	Event_Send(VI_INT);
-	
 	while (!stop)
 	{
-		
 		uint32_t Flags;
 
 		Event_ReceiveAny(VI_INT_DRAW|VI_INT_DLIST, &Flags);
-		
+
 		if (Flags & VI_INT_DLIST)
-		{	
+		{
 			gfx.processDList();
 		}
 
 		if (Flags & VI_INT_DRAW)
 		{
 			gfx.updateScreen();
-			Event_Send(VI_INT_NEXT);
-		}		
-		
+
+			//Send event to start next wait for screen draw
+			Event_Send(VI_INT_PENDING);
+		}
+
 		Event_Send(VI_INT_DONE);
 	}
 	return NULL;
 }
-/*
+
 static void* AudioThread(void * args)
 {
+	struct sched_param p;
+	p.sched_priority = mt_ai.uiPriority;
+	pthread_setschedparam(0, SCHED_FIFO, &p);
+
 	prctl(PR_SET_NAME,"M64P Audio",0,0,0);
-	DEBUG_PRINT("Starting AudioThread %lu\n", pthread_self());
+	if(mt_ai.bPrintDMsg) printf("Starting AudioThread %lu\n", pthread_self());
+
 	while (!stop)
-	{	
-		// send audio data to buffer
+	{
+		Event_ReceiveAll(AI_INT_PENDING);
+		usleep(mt_ai.uiWait);
+		if(mt_ai.bPrintDMsg) printf("send Event AI_INT, Count = %d\n", Count);
+		Event_Send(AI_INT);
 	}
 	return NULL;
 }
 
-static void* DMAThread(void * args)
+static void* _PI_Thread(void * args)
 {
-	prctl(PR_SET_NAME,"M64P DMA",0,0,0);
-	DEBUG_PRINT("Starting DMAThread %lu\n", pthread_self());
+	struct sched_param p;
+	p.sched_priority = mt_pi.uiPriority;
+	pthread_setschedparam(0, SCHED_FIFO, &p);
+
+	prctl(PR_SET_NAME,"M64P PI_INT",0,0,0);
+	if(mt_pi.bPrintDMsg) printf("Starting PI_INT Thread %lu\n", pthread_self());
 	while (!stop)
 	{
-		// do DMA transfer
+		Event_ReceiveAll(PI_INT_PENDING);
+		usleep(mt_pi.uiWait);
+		if(mt_pi.bPrintDMsg) printf("send Event PI_INT, Count = %d\n", Count);
+		Event_Send(PI_INT);
 	}
 	return NULL;
 }
-*/
+
+static void* _SI_Thread(void* args)
+{
+	struct sched_param p;
+	p.sched_priority = mt_si.uiPriority;
+	pthread_setschedparam(0, SCHED_FIFO, &p);
+
+	prctl(PR_SET_NAME,"M64P SI_INT",0,0,0);
+	if(mt_si.bPrintDMsg) printf("Starting SI_INT Thread %lu\n", pthread_self());
+	while (!stop)
+	{
+		Event_ReceiveAll(SI_INT_PENDING);
+		usleep(mt_si.uiWait);
+		if(mt_si.bPrintDMsg) printf("send Event SI_INT, Count = %d\n", Count);
+		Event_Send(SI_INT);
+	}
+	return NULL;
+}
+
+static void* _SP_Thread(void* args)
+{
+	struct sched_param p;
+	p.sched_priority = mt_sp.uiPriority;
+	pthread_setschedparam(0, SCHED_FIFO, &p);
+
+	prctl(PR_SET_NAME,"M64P SP_INT",0,0,0);
+	if(mt_sp.bPrintDMsg) printf("Starting SP_INT Thread %lu\n", pthread_self());
+	while (!stop)
+	{
+		Event_ReceiveAll(SP_INT_PENDING);
+		usleep(mt_sp.uiWait);
+		if(mt_sp.bPrintDMsg) printf("send Event SP_INT, Count = %d\n", Count);
+		Event_Send(SP_INT);
+	}
+	return NULL;
+}
+
+static void* _DP_Thread(void* args)
+{
+	struct sched_param p;
+	p.sched_priority = mt_dp.uiPriority;
+	pthread_setschedparam(0, SCHED_FIFO, &p);
+
+	prctl(PR_SET_NAME,"M64P DP_INT",0,0,0);
+	if(mt_dp.bPrintDMsg) printf("Starting DP_INT Thread %lu\n", pthread_self());
+	while (!stop)
+	{
+		Event_ReceiveAll(DP_INT_PENDING);
+		usleep(mt_dp.uiWait);
+		
+		if(mt_dp.bPrintDMsg) printf("send Event DP_INT, Count = %d\n", Count);
+		Event_Send(DP_INT);
+		
+	}
+	return NULL;
+}
+
+static void* _HW2_Thread(void* args)
+{
+	struct sched_param p;
+	p.sched_priority = mt_hw2.uiPriority;
+	pthread_setschedparam(0, SCHED_FIFO, &p);
+
+	prctl(PR_SET_NAME,"M64P HW2_INT",0,0,0);
+	if(mt_hw2.bPrintDMsg) printf("Starting HW2_INT Thread %lu\n", pthread_self());
+	while (!stop)
+	{
+		Event_ReceiveAll(HW2_INT_PENDING);
+		usleep(mt_hw2.uiWait);
+		if(mt_hw2.bPrintDMsg) printf("send Event HW2_INT, Count = %d\n", Count);
+		Event_Send(HW2_INT);
+		usleep(mt_nmi.uiWait);
+		if(mt_hw2.bPrintDMsg) printf("send Event NMI_INT, Count = %d\n", Count);
+		Event_Send(NMI_INT);
+	}
+	return NULL;
+}
+
 void init_interupt(void)
 {
  	if (qbase != NULL) free(qbase);
@@ -523,32 +630,22 @@ void init_interupt(void)
 
 	pthread_mutex_init(&InterruptLock,NULL);
 
-	/*
-	if ((e = pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED)))
-	{
-		DebugMessage(M64MSG_ERROR, "Failed to set attr to PTHREAD_EXPLICIT_SCHED %d", e);
-	}
-*/
 	if ((e = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)))
 	{
 		DebugMessage(M64MSG_ERROR, "Failed to set attr detachstate %d", e);
 	}
-/*
-	if ((e = pthread_attr_setschedpolicy(&attr, SCHED_FIFO)))
-	{
-		DebugMessage(M64MSG_ERROR, "Failed to set attr policy to SCHED_FIFO %d", e);
-	}
 
-	if ((e = pthread_attr_setschedparam(&attr, &p)))
-	{
-		DebugMessage(M64MSG_ERROR, "Failed to set attr param %d", e);
-	}
-*/
 	pthread_create(&SystemTimer_Thread, &attr, 	SystemTimer,	NULL);
 	pthread_create(&Graphics_Thread,	&attr,	GraphicsThread,	NULL);
+	pthread_create(&Graphics_Timer_Thread, &attr, GraphicsTimer, 	NULL);
 
 	//pthread_create(&Audio_Thread,		&attr,	AudioThread,	NULL);
-	//pthread_create(&DMA_Thread,			&attr,	DMAThread,		NULL);
+	pthread_create(&PI_Thread,			&attr,	_PI_Thread,		NULL);
+	pthread_create(&SI_Thread,			&attr,	_SI_Thread,		NULL);
+	pthread_create(&SP_Thread,			&attr,	_SP_Thread,		NULL);
+	pthread_create(&DP_Thread,			&attr,	_DP_Thread,		NULL);
+	pthread_create(&HW2_Thread,			&attr,	_HW2_Thread,		NULL);
+
 	usleep(10);
 	pthread_attr_destroy(&attr);
 
@@ -561,15 +658,14 @@ void init_interupt(void)
     vi_register.vi_delay = next_vi;
     vi_field = 0;
     //clear_queue();
-#ifndef NEW_METHOD
-    add_interupt_event_count(VI_INT, next_vi);
-#endif
+	if (!mt_vi.bUseEvents) add_interupt_event_count(VI_INT, next_vi);
+
     add_interupt_event_count(SPECIAL_INT, 0);
 }
 
 void check_interupt(void)
 {
-	DEBUG_PRINT("check_interupt\n");
+	//DEBUG_PRINT("check_interupt\n");
 
     if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
         Cause = (Cause | 0x400) & 0xFFFFFF83;
@@ -626,7 +722,15 @@ void X11_PumpEvents()
 	}
 }
 
+
 void gen_interupt(void)
+{
+	void _gen_interupt(void);
+	if (!mt_s.bUseEvents) _gen_interupt();
+
+}
+
+void _gen_interupt(void)
 {
 	/*static int count=0, time=0;
 	count++;
@@ -665,26 +769,23 @@ void gen_interupt(void)
     {
         unsigned int dest = skip_jump;
         skip_jump = 0;
-pthread_mutex_lock(&InterruptLock);
+		pthread_mutex_lock(&InterruptLock);
         if (q->count > Count || (Count - q->count) < 0x80000000)
             next_interupt = q->count;
         else
             next_interupt = 0;
 
         last_addr = dest;
+		pthread_mutex_unlock(&InterruptLock);
         generic_jump_to(dest);
-pthread_mutex_unlock(&InterruptLock);
+
         return;
     }
-	DEBUG_PRINT("gen_interupt() %d, Count = %d\n", q->type, Count);
-
-
-
+	if (mt_s.bPrintDMsg) printf("\tgen_interupt() called, Count = %d\n", Count);
 	unsigned int Flags = 0;
 
-#ifdef NEW_METHOD
-	Event_ReceiveAnyNB(VI_INT, &Flags);
-#endif
+	//Non-blocking receive any of the following events
+	Event_ReceiveAnyNB(VI_INT | AI_INT | SI_INT | PI_INT | SP_INT | DP_INT | NMI_INT | HW2_INT, &Flags);
 
 	if (Flags & VI_INT)
 	{
@@ -698,6 +799,8 @@ pthread_mutex_unlock(&InterruptLock);
         {
             cheat_apply_cheats(ENTRY_VI);
         }
+
+		if(mt_vi.bPrintDMsg) printf("\tVI_INT\n");
 
 		//let the graphics thread start
 		Event_Send(VI_INT_DRAW);
@@ -744,20 +847,163 @@ pthread_mutex_unlock(&InterruptLock);
         if ((Status & 7) != 1) return;
         if (!(Status & Cause & 0xFF00)) return;
 	}
-	else 
-	{
 
-pthread_mutex_lock(&InterruptLock);
+	if (Flags & SI_INT)	
+	{
+		if(mt_pi.bPrintDMsg) printf("\tSI_INT\n");
+		SDL_PumpEvents();
+        X11_PumpEvents();
+	    PIF_RAMb[0x3F] = 0x0;
+
+        MI_register.mi_intr_reg |= 0x02;
+		si_register.si_stat |= 0x1000;
+		if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
+			Cause = (Cause | 0x400) & 0xFFFFFF83;
+		else
+			return;
+		if ((Status & 7) != 1) return;
+		if (!(Status & Cause & 0xFF00)) return;
+	}
+
+	if (Flags & PI_INT)	
+	{
+		if(mt_pi.bPrintDMsg) printf("\tPI_INT\n");
+        MI_register.mi_intr_reg |= 0x10;
+        pi_register.read_pi_status_reg &= ~3;
+        if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
+            Cause = (Cause | 0x400) & 0xFFFFFF83;
+        else
+            return;
+        if ((Status & 7) != 1) return;
+        if (!(Status & Cause & 0xFF00)) return;
+	}
+
+	if (Flags & AI_INT)	
+	{
+		if (ai_register.ai_status & 0x80000000) // full
+        {
+			if(mt_ai.bPrintDMsg) printf("\tAI_INT ai_status full\n");
+            ai_register.ai_status &= ~0x80000000;
+            ai_register.current_delay = ai_register.next_delay;
+            ai_register.current_len = ai_register.next_len;
+
+			Event_Send(AI_INT_PENDING);
+
+            MI_register.mi_intr_reg |= 0x04;
+            if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
+                Cause = (Cause | 0x400) & 0xFFFFFF83;
+            else
+                return;
+            if ((Status & 7) != 1) return;
+            if (!(Status & Cause & 0xFF00)) return;
+        }
+        else
+        {
+			if(mt_ai.bPrintDMsg) printf("\tAI_INT\n");
+            ai_register.ai_status &= ~0x40000000;
+
+            //-------
+            MI_register.mi_intr_reg |= 0x04;
+            if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
+                Cause = (Cause | 0x400) & 0xFFFFFF83;
+            else
+                return;
+            if ((Status & 7) != 1) return;
+            if (!(Status & Cause & 0xFF00)) return;
+        }
+	}
+
+	if (Flags & SP_INT)	
+	{
+		if(mt_sp.bPrintDMsg) printf("\tSP_INT\n");
+        sp_register.sp_status_reg |= 0x203;
+        // sp_register.sp_status_reg |= 0x303;
+
+        if (!(sp_register.sp_status_reg & 0x40)) return; // !intr_on_break
+        MI_register.mi_intr_reg |= 0x01;
+        if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
+            Cause = (Cause | 0x400) & 0xFFFFFF83;
+        else
+            return;
+        if ((Status & 7) != 1) return;
+        if (!(Status & Cause & 0xFF00)) return;
+	}
+
+	if (Flags & DP_INT)	
+	{
+		if(mt_dp.bPrintDMsg) printf("\tDP_INT\n");
+        dpc_register.dpc_status &= ~2;
+        dpc_register.dpc_status |= 0x81;
+        MI_register.mi_intr_reg |= 0x20;
+        if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
+            Cause = (Cause | 0x400) & 0xFFFFFF83;
+        else
+            return;
+        if ((Status & 7) != 1) return;
+        if (!(Status & Cause & 0xFF00)) return;
+	}
+
+	if (Flags & HW2_INT)	
+	{
+		// setup r4300 Status flags: reset TS, and SR, set IM2
+        Status = (Status & ~0x00380000) | 0x1000;
+        Cause = (Cause | 0x1000) & 0xFFFFFF83;
+        /* the exception_general() call below will jump to the interrupt vector (0x80000180) and setup the
+         * interpreter or dynarec
+         */
+	}
+
+	if (Flags & NMI_INT)	
+	{
+		// Non Maskable Interrupt -- remove interrupt event from queue
+        // setup r4300 Status flags: reset TS and SR, set BEV, ERL, and SR
+        Status = (Status & ~0x00380000) | 0x00500004;
+        Cause  = 0x00000000;
+        // simulate the soft reset code which would run from the PIF ROM
+        r4300_reset_soft();
+        // clear all interrupts, reset interrupt counters back to 0
+        Count = 0;
+        vi_counter = 0;
+        init_interupt();
+        // clear the audio status register so that subsequent write_ai() calls will work properly
+        ai_register.ai_status = 0;
+        // set ErrorEPC with the last instruction address
+        ErrorEPC = PC->addr;
+        // reset the r4300 internal state
+        if (r4300emu != CORE_PURE_INTERPRETER)
+        {
+            // clear all the compiled instruction blocks and re-initialize
+            free_blocks();
+            init_blocks();
+        }
+        // adjust ErrorEPC if we were in a delay slot, and clear the delay_slot and dyna_interp flags
+        if(delay_slot==1 || delay_slot==3)
+        {
+            ErrorEPC-=4;
+        }
+        delay_slot = 0;
+        dyna_interp = 0;
+        // set next instruction address to reset vector
+        last_addr = 0xa4000040;
+		DEBUG_PRINT("generic_jump_to(0xa4000040)\n");
+        generic_jump_to(0xa4000040);
+	}
+
+	pthread_mutex_lock(&InterruptLock);
+	
 	switch(q->type)
     {
         case SPECIAL_INT:
-            if (Count > 0x10000000) return;
+            if (Count > 0x10000000) 
+			{
+				pthread_mutex_unlock(&InterruptLock);
+				return;
+			}
             remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+			pthread_mutex_unlock(&InterruptLock);
             add_interupt_event_count(SPECIAL_INT, 0);
             return;
             break;
-#ifndef NEW_METHOD
         case VI_INT:
             if(vi_counter < 60)
             {
@@ -769,9 +1015,10 @@ pthread_mutex_unlock(&InterruptLock);
             {
                 cheat_apply_cheats(ENTRY_VI);
             }
-            
+
 			remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+			pthread_mutex_unlock(&InterruptLock);
+			if(mt_vi.bPrintDMsg) printf("\tVI_INT\n");
 			//let the graphics thread start
 			Event_Send(VI_INT_DRAW);
 
@@ -790,9 +1037,6 @@ pthread_mutex_unlock(&InterruptLock);
                     SDL_Delay(10);
                     SDL_PumpEvents();
 					X11_PumpEvents();
-#ifdef WITH_LIRC
-                    lircCheckInput();
-#endif //WITH_LIRC
                 }
             }
 
@@ -812,7 +1056,7 @@ pthread_mutex_unlock(&InterruptLock);
             if (vi_register.vi_status&0x40) vi_field=1-vi_field;
             else vi_field=0;
 
-            add_interupt_event_count(VI_INT, next_vi);
+           // add_interupt_event_count(VI_INT, next_vi);
 
 			MI_register.mi_intr_reg |= 0x08;
             if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
@@ -822,10 +1066,10 @@ pthread_mutex_unlock(&InterruptLock);
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
             break;
-#endif
+
         case COMPARE_INT:
             remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+			pthread_mutex_unlock(&InterruptLock);
             Count+=2;
             add_interupt_event_count(COMPARE_INT, Compare);
             Count-=2;
@@ -837,18 +1081,15 @@ pthread_mutex_unlock(&InterruptLock);
 
         case CHECK_INT:
             remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+			pthread_mutex_unlock(&InterruptLock);
             break;
-
         case SI_INT:
-#ifdef WITH_LIRC
-            lircCheckInput();
-#endif //WITH_LIRC
             SDL_PumpEvents();
             X11_PumpEvents();
 	    PIF_RAMb[0x3F] = 0x0;
             remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+			pthread_mutex_unlock(&InterruptLock);
+			if(mt_si.bPrintDMsg) printf("\tSI_INT\n");
             MI_register.mi_intr_reg |= 0x02;
             si_register.si_stat |= 0x1000;
             if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
@@ -860,7 +1101,8 @@ pthread_mutex_unlock(&InterruptLock);
             break;
         case PI_INT:
             remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+			pthread_mutex_unlock(&InterruptLock);
+			if(mt_pi.bPrintDMsg) printf("\tPI_INT\n");
             MI_register.mi_intr_reg |= 0x10;
             pi_register.read_pi_status_reg &= ~3;
             if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
@@ -870,18 +1112,17 @@ pthread_mutex_unlock(&InterruptLock);
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
             break;
-
         case AI_INT:
             if (ai_register.ai_status & 0x80000000) // full
             {
                 unsigned int ai_event = get_event(AI_INT);
                 remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+				pthread_mutex_unlock(&InterruptLock);
+				if(mt_ai.bPrintDMsg) printf("\tAI_INT ai_status full\n");
                 ai_register.ai_status &= ~0x80000000;
                 ai_register.current_delay = ai_register.next_delay;
                 ai_register.current_len = ai_register.next_len;
                 add_interupt_event_count(AI_INT, ai_event+ai_register.next_delay);
-
                 MI_register.mi_intr_reg |= 0x04;
                 if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
                     Cause = (Cause | 0x400) & 0xFFFFFF83;
@@ -893,7 +1134,8 @@ pthread_mutex_unlock(&InterruptLock);
             else
             {
                 remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+				pthread_mutex_unlock(&InterruptLock);
+				if(mt_ai.bPrintDMsg) printf("\tAI_INT\n");
                 ai_register.ai_status &= ~0x40000000;
 
                 //-------
@@ -909,7 +1151,8 @@ pthread_mutex_unlock(&InterruptLock);
 
         case SP_INT:
             remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+			pthread_mutex_unlock(&InterruptLock);
+			if(mt_sp.bPrintDMsg) printf("\tSP_INT\n");
             sp_register.sp_status_reg |= 0x203;
             // sp_register.sp_status_reg |= 0x303;
 
@@ -925,7 +1168,8 @@ pthread_mutex_unlock(&InterruptLock);
 
         case DP_INT:
             remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+			pthread_mutex_unlock(&InterruptLock);
+			if(mt_dp.bPrintDMsg) printf("\tDP_INT\n");
             dpc_register.dpc_status &= ~2;
             dpc_register.dpc_status |= 0x81;
             MI_register.mi_intr_reg |= 0x20;
@@ -951,7 +1195,7 @@ pthread_mutex_unlock(&InterruptLock);
         case NMI_INT:
             // Non Maskable Interrupt -- remove interrupt event from queue
             remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+			pthread_mutex_unlock(&InterruptLock);
             // setup r4300 Status flags: reset TS and SR, set BEV, ERL, and SR
             Status = (Status & ~0x00380000) | 0x00500004;
             Cause  = 0x00000000;
@@ -988,14 +1232,13 @@ pthread_mutex_unlock(&InterruptLock);
         default:
             DebugMessage(M64MSG_ERROR, "Unknown interrupt queue event type %.8X.", q->type);
             remove_interupt_event();
-pthread_mutex_unlock(&InterruptLock);
+			pthread_mutex_unlock(&InterruptLock);
             break;
-    }
 	}
 
 #ifdef NEW_DYNAREC
     if (r4300emu == CORE_DYNAREC) {
-		DEBUG_PRINT("Setting PC for Dynarec %X\n", pcaddr);
+		//DEBUG_PRINT("Setting PC for Dynarec %X\n", pcaddr);
         EPC = pcaddr;
         pcaddr = 0x80000180;
         Status |= 2;

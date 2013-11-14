@@ -31,6 +31,7 @@
 #include "flashram.h"
 
 #include "r4300/r4300.h"
+#include "r4300/event.h"
 #include "r4300/interupt.h"
 #include "r4300/macros.h"
 #include "r4300/ops.h"
@@ -144,7 +145,8 @@ void dma_pi_read(void)
 
     pi_register.read_pi_status_reg |= 1;
     update_count();
-    add_interupt_event(PI_INT, 0x1000/*pi_register.pi_rd_len_reg*/);
+	if(mt_pi.bUseEvents) Event_Send(PI_INT);
+	else add_interupt_event(PI_INT, 0x1001/*pi_register.pi_rd_len_reg*/);
 }
 
 void dma_pi_write(void)
@@ -190,7 +192,8 @@ void dma_pi_write(void)
 
         pi_register.read_pi_status_reg |= 1;
         update_count();
-        add_interupt_event(PI_INT, /*pi_register.pi_wr_len_reg*/0x1000);
+	if (mt_pi.bUseEvents) Event_Send(PI_INT);
+	else add_interupt_event(PI_INT, /*pi_register.pi_wr_len_reg*/0x1002);
 
         return;
     }
@@ -199,7 +202,8 @@ void dma_pi_write(void)
     {
         pi_register.read_pi_status_reg |= 1;
         update_count();
-        add_interupt_event(PI_INT, 0x1000);
+	if(mt_pi.bUseEvents) Event_Send(PI_INT);
+	else add_interupt_event(PI_INT, 0x1003);
 
         return;
     }
@@ -215,7 +219,8 @@ void dma_pi_write(void)
     {
         pi_register.read_pi_status_reg |= 3;
         update_count();
-        add_interupt_event(PI_INT, longueur/8);
+	if (mt_pi.bUseEvents) Event_Send(PI_INT);
+	else add_interupt_event(PI_INT, longueur/8);
 
         return;
     }
@@ -226,10 +231,10 @@ void dma_pi_write(void)
         unsigned long rdram_address2 = pi_register.pi_dram_addr_reg+i+0xa0000000;
 
 		PRINT_DMA_MSG(M64MSG_INFO, "dma.c:%d %X %X, longueur = %d", __LINE__, ((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur );
-        
+
 #if 0
 		memcpy(&rdram[pi_register.pi_dram_addr_reg], &rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur);
-		
+
 		if (!invalid_code[rdram_address1>>12])
         {
             if (!blocks[rdram_address1>>12] ||
@@ -253,7 +258,7 @@ void dma_pi_write(void)
         }
 #else
 		for (i=0; i<(int)longueur; i++)
-        {            
+        {
 			((unsigned char*)rdram)[(pi_register.pi_dram_addr_reg+i)^S8]= rom[(((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)+i)^S8];
 
             if (!invalid_code[rdram_address1>>12])
@@ -278,7 +283,7 @@ void dma_pi_write(void)
                 }
             }
         }
-#endif    
+#endif
 	}
     else
     {
@@ -332,7 +337,8 @@ void dma_pi_write(void)
 
     pi_register.read_pi_status_reg |= 3;
     update_count();
-    add_interupt_event(PI_INT, longueur/8);
+	if (mt_pi.bUseEvents) Event_Send(PI_INT);
+	else add_interupt_event(PI_INT, longueur/8);
 
     return;
 }
@@ -433,7 +439,8 @@ void dma_si_write(void)
 
     update_pif_write();
     update_count();
-    add_interupt_event(SI_INT, /*0x100*/0x900);
+	if (mt_si.bUseEvents) Event_Send(SI_INT);
+	else add_interupt_event(SI_INT, /*0x100*/0x900);
 }
 
 void dma_si_read(void)
@@ -454,6 +461,7 @@ void dma_si_read(void)
     }
 
     update_count();
-    add_interupt_event(SI_INT, /*0x100*/0x900);
+	if (mt_si.bUseEvents) Event_Send(SI_INT);
+	else add_interupt_event(SI_INT, /*0x100*/0x900);
 }
 

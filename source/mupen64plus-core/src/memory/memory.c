@@ -1402,10 +1402,12 @@ static void do_SP_Task(void)
 
         update_count();
         if (MI_register.mi_intr_reg & 0x1)
-            add_interupt_event(SP_INT, 4000/*500*/);
-        MI_register.mi_intr_reg &= ~0x1;
+        {
+    		if (mt_sp.bUseEvents) Event_Send(SP_INT);
+		else add_interupt_event(SP_INT, 4000/*500*/);
+        }
+	MI_register.mi_intr_reg &= ~0x1;
         sp_register.sp_status_reg &= ~0x303;
-        
     }
     else
     {
@@ -1415,7 +1417,10 @@ static void do_SP_Task(void)
 
         update_count();
         if (MI_register.mi_intr_reg & 0x1)
-            add_interupt_event(SP_INT, 0/*100*/);
+	{
+		if (mt_si.bUseEvents) Event_Send(SP_INT);
+		else add_interupt_event(SP_INT, 0/*100*/);
+	}
         MI_register.mi_intr_reg &= ~0x1;
         sp_register.sp_status_reg &= ~0x203;
     }
@@ -2870,7 +2875,10 @@ void write_ai(void)
             ai_register.current_delay = delay;
             ai_register.current_len = ai_register.ai_len;
             update_count();
-            add_interupt_event(AI_INT, delay);
+
+			if (mt_ai.bUseEvents)Event_Send(AI_INT);
+			else add_interupt_event(AI_INT, delay);
+
             ai_register.ai_status |= 0x40000000;
         }
         return;
@@ -2928,7 +2936,11 @@ void write_aib(void)
             ai_register.current_delay = delay;
             ai_register.current_len = ai_register.ai_len;
             update_count();
+#ifdef AI_EVENTS
+		Event_Send(AI_INT);
+#else
             add_interupt_event(AI_INT, delay/2);
+#endif
             ai_register.ai_status |= 0x40000000;
         }
         return;
@@ -2987,7 +2999,11 @@ void write_aih(void)
             ai_register.current_delay = delay;
             ai_register.current_len = ai_register.ai_len;
             update_count();
+#ifdef AI_EVENTS
+		Event_Send(AI_INT);
+#else
             add_interupt_event(AI_INT, delay/2);
+#endif
             ai_register.ai_status |= 0x40000000;
         }
         return;
@@ -3038,7 +3054,11 @@ void write_aid(void)
             ai_register.current_delay = delay;
             ai_register.current_len = ai_register.ai_len;
             update_count();
+#ifdef AI_EVENTS
+		Event_Send(AI_INT);
+#else
             add_interupt_event(AI_INT, delay/2);
+#endif
             ai_register.ai_status |= 0x40000000;
         }
         return;
@@ -3624,7 +3644,11 @@ void write_pif(void)
         {
             PIF_RAMb[0x3F] = 0;
             update_count();
+#ifdef SI_EVENTS
+		Event_Send(SI_INT);
+#else
             add_interupt_event(SI_INT, /*0x100*/0x900);
+#endif
         }
         else
             update_pif_write();
@@ -3646,7 +3670,11 @@ void write_pifb(void)
         {
             PIF_RAMb[0x3F] = 0;
             update_count();
+#ifdef SI_EVENTS
+		Event_Send(SI_INT);
+#else
             add_interupt_event(SI_INT, /*0x100*/0x900);
+#endif
         }
         else
             update_pif_write();
@@ -3669,7 +3697,11 @@ void write_pifh(void)
         {
             PIF_RAMb[0x3F] = 0;
             update_count();
+#ifdef SI_EVENTS
+		Event_Send(SI_INT);
+#else
             add_interupt_event(SI_INT, /*0x100*/0x900);
+#endif
         }
         else
             update_pif_write();
@@ -3694,7 +3726,9 @@ void write_pifd(void)
         {
             PIF_RAMb[0x3F] = 0;
             update_count();
-            add_interupt_event(SI_INT, /*0x100*/0x900);
+			if (mt_si.bUseEvents) Event_Send(SI_INT);
+			else add_interupt_event(SI_INT, /*0x100*/0x900);
+
         }
         else
             update_pif_write();

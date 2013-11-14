@@ -43,40 +43,49 @@ int get_next_event_type(void);
 int save_eventqueue_infos(char *buf);
 void load_eventqueue_infos(char *buf);
 
+#define VI_INT      		0x00000001
+#define VI_INT_DONE			0x00000002
+#define VI_INT_DRAW			0x00000004
+#define VI_INT_DLIST		0x00000008
+#define VI_INT_PENDING		0x00010000
 
-#define VI_INT      		0x00001
-#define VI_INT_DONE			0x00002
-#define VI_INT_DRAW			0x00004
-#define VI_INT_DLIST		0x00008
+#define AI_INT      		0x00000010
+#define AI_INT_DONE			0x00000020
+#define AI_INT_PENDING		0x00100000
 
-#define AI_INT      		0x00010
-#define AI_INT_DONE			0x00020
-#define AI_INT_PENDING		0x00040
+#define SI_INT      		0x00000400
+#define SI_INT_PENDING		0x04000000
 
-#define COMPARE_INT 		0x00100
-#define CHECK_INT   		0x00200
-#define SI_INT      		0x00400
-#define PI_INT      		0x00800
-#define SPECIAL_INT 		0x01000
-#define SP_INT      		0x02000
-#define DP_INT      		0x04000
-#define HW2_INT     		0x08000
-#define NMI_INT     		0x10000
+#define PI_INT      		0x00000800
+#define PI_INT_PENDING		0x08000000
 
-#define VI_INT_NEXT			0x20000
+#define SP_INT      		0x00001000
+#define SP_INT_PENDING		0x10000000
 
-/*
-#define VI_INT      0x001
-#define COMPARE_INT 0x002
-#define CHECK_INT   0x003
-#define SI_INT      0x004
-#define PI_INT      0x005
-#define SPECIAL_INT 0x006
-#define AI_INT      0x007
-#define SP_INT      0x008
-#define DP_INT      0x009
-#define HW2_INT     0x00A
-#define NMI_INT     0x00B
-*/
-#define INT_COUNT	15
+#define DP_INT      		0x00002000
+#define DP_INT_PENDING		0x20000000
+
+#define HW2_INT     		0x00004000
+#define	HW2_INT_PENDING		0x40000000
+
+#define NMI_INT     		0x00008000
+
+#define COMPARE_INT 		0x00020000
+#define CHECK_INT   		0x00040000
+#define SPECIAL_INT 		0x00080000
+
+typedef struct _mt_thread {
+	unsigned int uiPriority;
+	unsigned int uiWait;
+	unsigned int bUseEvents;
+	unsigned int bPrintDMsg;
+} mt_thread;
+
+typedef struct _mt_options {
+	unsigned int bEventYields;
+	unsigned int bEventDMsg;
+} mt_options;
+
+extern mt_options mt_o;
+extern mt_thread mt_s, mt_vi, mt_ai, mt_pi, mt_si, mt_dp, mt_sp, mt_nmi, mt_hw2;
 
