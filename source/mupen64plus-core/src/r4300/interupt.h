@@ -84,6 +84,9 @@ typedef struct _mt_thread {
 typedef struct _mt_options {
 	unsigned int bEventYields;
 	unsigned int bEventDMsg;
+	unsigned int bSPECIAL_INT;
+	unsigned int bCOMPARE_INT;
+	unsigned int bCHECK_INT;
 } mt_options;
 
 extern mt_options mt_o;

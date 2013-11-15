@@ -204,48 +204,51 @@ int main_set_core_defaults(void)
     
 //---------------------------------------------------------------------------------------
 	// Multi-threaded options
-	ConfigSetDefaultBool(g_CoreConfig,"MT_YIELD_EVENT_SEND", 1, "When a thread sends an event, call sched_yield() to run highest priority thread");
+	ConfigSetDefaultBool(g_CoreConfig,"MT_YIELD_EVENT_SEND", 1, "\n# When a thread sends an event, call sched_yield() to run highest priority thread");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_EVENT_DMSG", 0, "Print Event Debug Messages");
-
-	ConfigSetDefaultInt(g_CoreConfig, "MT_SYSTEM_TIMER_PRIO", 20, "Priority of the System Timer Thread");
+	ConfigSetDefaultBool(g_CoreConfig,"MT_USE_SPECIAL_INT", 1, "Use SPECIAL_INTs. I think these mark when the Count vaiable wraps at 0x10000000");
+	ConfigSetDefaultBool(g_CoreConfig,"MT_USE_COMPARE_INT", 1, "Use COMPARE_INTs");
+	ConfigSetDefaultBool(g_CoreConfig,"MT_USE_CHECK_INT", 1, "call to check_interupt() raises a COMPARE_INT");
+	
+	ConfigSetDefaultInt(g_CoreConfig, "MT_SYSTEM_TIMER_PRIO", 20, "\n# Priority of the System Timer Thread");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_SYSTEM_TIMER_EVENTS", 0, "System Timer calls gen_interupt()");
 	ConfigSetDefaultInt(g_CoreConfig, "MT_SYSTEM_TIMER_WAIT", 2000, "Wait time (us) if Events Enabled");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_SYSTEM_TIMER_DMSG", 0, "Print Debug Messages");
 
-	ConfigSetDefaultInt(g_CoreConfig, "MT_VI_PRIO", 16, "Priority of Thread");
+	ConfigSetDefaultInt(g_CoreConfig, "MT_VI_PRIO", 16, "\n# Priority of Thread");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_VI_EVENTS", 0, "Use Events for Screen Update");
 	ConfigSetDefaultInt(g_CoreConfig, "MT_VI_WAIT", 0, "Wait time (us) if Events Enabled");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_VI_DMSG", 0, "Print Debug Messages");
 
-	ConfigSetDefaultInt(g_CoreConfig, "MT_AI_PRIO", 15, "Priority of Thread");
+	ConfigSetDefaultInt(g_CoreConfig, "MT_AI_PRIO", 15, "\n# Priority of Thread");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_AI_EVENTS", 0, "Use Events for Audio");
 	ConfigSetDefaultInt(g_CoreConfig, "MT_AI_WAIT", 16000, 	 "Wait time (us) if Events Enabled");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_AI_DMSG", 0, "Print Debug Messages");
 
-	ConfigSetDefaultInt(g_CoreConfig, "MT_PI_PRIO", 14, "Priority of Thread");
+	ConfigSetDefaultInt(g_CoreConfig, "MT_PI_PRIO", 14, "\n# Priority of Thread");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_PI_EVENTS", 0, "Use Events for Interrupt");
 	ConfigSetDefaultInt(g_CoreConfig, "MT_PI_WAIT", 16000, "Wait time (us) if Events Enabled");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_PI_DMSG", 0, "Print Debug Messages");
 	
-	ConfigSetDefaultInt(g_CoreConfig, "MT_SI_PRIO", 13, "Priority of Thread");
+	ConfigSetDefaultInt(g_CoreConfig, "MT_SI_PRIO", 13, "\n# Priority of Thread");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_SI_EVENTS", 0, "Use Events for Interrupt");
 	ConfigSetDefaultInt(g_CoreConfig, "MT_SI_WAIT", 2000, "Wait time (us) if Events Enabled");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_SI_DMSG", 0, "Print Debug Messages");
 
-	ConfigSetDefaultInt(g_CoreConfig, "MT_DP_PRIO", 12, "Priority of Thread");
+	ConfigSetDefaultInt(g_CoreConfig, "MT_DP_PRIO", 12, "\n# Priority of Thread");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_DP_EVENTS", 0, "Use Events for Interrupt");
 	ConfigSetDefaultInt(g_CoreConfig, "MT_DP_WAIT", 2000, "Wait time (us) if Events Enabled");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_DP_DMSG", 0, "Print Debug Messages");
 
-	ConfigSetDefaultInt(g_CoreConfig, "MT_SP_PRIO", 11, "Priority of Thread");
+	ConfigSetDefaultInt(g_CoreConfig, "MT_SP_PRIO", 11, "\n# Priority of Thread");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_SP_EVENTS", 0, "Use Events for Interrupt");
 	ConfigSetDefaultInt(g_CoreConfig, "MT_SP_WAIT", 2000, "Wait time (us) if Events Enabled");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_SP_DMSG", 0, "Print Debug Messages");
 
-	ConfigSetDefaultBool(g_CoreConfig,"MT_NMI_EVENTS", 0, "Use Events for Interrupt");
+	ConfigSetDefaultBool(g_CoreConfig,"MT_NMI_EVENTS", 0, "\n# Use Events for Interrupt");
 	ConfigSetDefaultInt(g_CoreConfig, "MT_NMI_WAIT", 5000000, "Wait time (us) if Events Enabled");
 
-	ConfigSetDefaultBool(g_CoreConfig,"MT_HW2_EVENTS", 0, "Use Events for Interrupt");
+	ConfigSetDefaultBool(g_CoreConfig,"MT_HW2_EVENTS", 0, "\n# Use Events for Interrupt");
 	ConfigSetDefaultInt(g_CoreConfig, "MT_HW2_WAIT", 2000, "Wait time (us) if Events Enabled");
 
 //---------------------------------------------------------------------------------------
@@ -788,7 +791,10 @@ m64p_error main_run(void)
 
 	mt_o.bEventYields = ConfigGetParamBool(g_CoreConfig,"MT_YIELD_EVENT_SEND");
 	mt_o.bEventDMsg	= ConfigGetParamBool(g_CoreConfig,"MT_EVENT_DMSG");
-
+	mt_o.bSPECIAL_INT = ConfigGetParamBool(g_CoreConfig,"MT_USE_SPECIAL_INT");
+	mt_o.bCOMPARE_INT = ConfigGetParamBool(g_CoreConfig,"MT_USE_COMPARE_INT");
+	mt_o.bCHECK_INT = ConfigGetParamBool(g_CoreConfig,"MT_USE_CHECK_INT");
+	
 	mt_s.uiPriority = ConfigGetParamInt(g_CoreConfig, "MT_SYSTEM_TIMER_PRIO");
 	mt_s.bUseEvents = ConfigGetParamBool(g_CoreConfig,"MT_SYSTEM_TIMER_EVENTS");
 	mt_s.uiWait	 	= ConfigGetParamInt(g_CoreConfig, "MT_SYSTEM_TIMER_WAIT");

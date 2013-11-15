@@ -72,7 +72,7 @@ extern uint32_t SDL_GetTicks();
 //----- Prototypes ----------------------
 
 void X11_PumpEvents();
-
+void _gen_interupt(void);
 
 //----- Local Variables -----------------
 
@@ -82,8 +82,6 @@ static pthread_mutex_t 	InterruptLock;
 static pthread_t 		SystemTimer_Thread, 	Graphics_Timer_Thread;
 static pthread_t		Graphics_Thread,	PI_Thread, 	SI_Thread, DP_Thread, SP_Thread, HW2_Thread, Audio_Thread;
 
-static unsigned int 	InterruptFlag;
-static int 				int_count 	= 0;
 static int 				vi_counter 	= 0;
 
 static int SPECIAL_done = 0;
@@ -144,7 +142,7 @@ static void queue_free(interupt_queue *qToFree)
 }
 
 //-------------------------------------------------------
-
+/*
 static void clear_queue(void)
 {
     while(q != NULL)
@@ -154,7 +152,7 @@ static void clear_queue(void)
         q = aux;
     }
 }
-
+*/
 /*static void print_queue(void)
 {
     interupt_queue *aux;
@@ -349,8 +347,8 @@ pthread_mutex_lock(&InterruptLock);
         aux = aux->next;
     }
 pthread_mutex_unlock(&InterruptLock);
-    add_interupt_event_count(COMPARE_INT, Compare);
-    add_interupt_event_count(SPECIAL_INT, 0);
+    if (mt_o.bCOMPARE_INT) add_interupt_event_count(COMPARE_INT, Compare);
+    if (mt_o.bSPECIAL_INT) add_interupt_event_count(SPECIAL_INT, 0);
 }
 
 int save_eventqueue_infos(char *buf)
@@ -493,7 +491,7 @@ static void* GraphicsThread(void * args)
 	return NULL;
 }
 
-static void* AudioThread(void * args)
+static void* _AI_Thread(void * args)
 {
 	struct sched_param p;
 	p.sched_priority = mt_ai.uiPriority;
@@ -639,12 +637,12 @@ void init_interupt(void)
 	pthread_create(&Graphics_Thread,	&attr,	GraphicsThread,	NULL);
 	pthread_create(&Graphics_Timer_Thread, &attr, GraphicsTimer, 	NULL);
 
-	//pthread_create(&Audio_Thread,		&attr,	AudioThread,	NULL);
+	pthread_create(&Audio_Thread,		&attr,	_AI_Thread,		NULL);
 	pthread_create(&PI_Thread,			&attr,	_PI_Thread,		NULL);
 	pthread_create(&SI_Thread,			&attr,	_SI_Thread,		NULL);
 	pthread_create(&SP_Thread,			&attr,	_SP_Thread,		NULL);
 	pthread_create(&DP_Thread,			&attr,	_DP_Thread,		NULL);
-	pthread_create(&HW2_Thread,			&attr,	_HW2_Thread,		NULL);
+	pthread_create(&HW2_Thread,			&attr,	_HW2_Thread,	NULL);
 
 	usleep(10);
 	pthread_attr_destroy(&attr);
@@ -660,7 +658,7 @@ void init_interupt(void)
     //clear_queue();
 	if (!mt_vi.bUseEvents) add_interupt_event_count(VI_INT, next_vi);
 
-    add_interupt_event_count(SPECIAL_INT, 0);
+    if (mt_o.bSPECIAL_INT) add_interupt_event_count(SPECIAL_INT, 0);
 }
 
 void check_interupt(void)
@@ -672,26 +670,30 @@ void check_interupt(void)
     else
         Cause &= ~0x400;
     if ((Status & 7) != 1) return;
+
     if (Status & Cause & 0xFF00)
     {
-pthread_mutex_lock(&InterruptLock);
-        if(q == NULL)
-        {
-            q = (interupt_queue *) queue_malloc(sizeof(interupt_queue));
-            q->next = NULL;
-            q->count = Count;
-            q->type = CHECK_INT;
-        }
-        else
-        {
-            interupt_queue* aux = (interupt_queue *) queue_malloc(sizeof(interupt_queue));
-            aux->next = q;
-            aux->count = Count;
-            aux->type = CHECK_INT;
-            q = aux;
-        }
-        next_interupt = Count;
-pthread_mutex_unlock(&InterruptLock);
+		if (mt_o.bCHECK_INT)
+		{
+			pthread_mutex_lock(&InterruptLock);
+			if(q == NULL)
+			{
+				q = (interupt_queue *) queue_malloc(sizeof(interupt_queue));
+				q->next = NULL;
+				q->count = Count;
+				q->type = CHECK_INT;
+			}
+			else
+			{
+				interupt_queue* aux = (interupt_queue *) queue_malloc(sizeof(interupt_queue));
+				aux->next = q;
+				aux->count = Count;
+				aux->type = CHECK_INT;
+				q = aux;
+			}
+			next_interupt = Count;
+			pthread_mutex_unlock(&InterruptLock);
+		}	
     }
 }
 
@@ -725,7 +727,6 @@ void X11_PumpEvents()
 
 void gen_interupt(void)
 {
-	void _gen_interupt(void);
 	if (!mt_s.bUseEvents) _gen_interupt();
 
 }
@@ -1001,7 +1002,7 @@ void _gen_interupt(void)
 			}
             remove_interupt_event();
 			pthread_mutex_unlock(&InterruptLock);
-            add_interupt_event_count(SPECIAL_INT, 0);
+            if (mt_o.bSPECIAL_INT) add_interupt_event_count(SPECIAL_INT, 0);
             return;
             break;
         case VI_INT:
@@ -1071,7 +1072,7 @@ void _gen_interupt(void)
             remove_interupt_event();
 			pthread_mutex_unlock(&InterruptLock);
             Count+=2;
-            add_interupt_event_count(COMPARE_INT, Compare);
+            if (mt_o.bCOMPARE_INT) add_interupt_event_count(COMPARE_INT, Compare);
             Count-=2;
 
             Cause = (Cause | 0x8000) & 0xFFFFFF83;
