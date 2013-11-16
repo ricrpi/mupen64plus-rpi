@@ -217,7 +217,7 @@ int main_set_core_defaults(void)
 
 	ConfigSetDefaultInt(g_CoreConfig, "MT_VI_PRIO", 16, "\n# Priority of Thread");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_VI_EVENTS", 0, "Use Events for Screen Update");
-	ConfigSetDefaultInt(g_CoreConfig, "MT_VI_WAIT", 0, "Wait time (us) if Events Enabled");
+	ConfigSetDefaultInt(g_CoreConfig, "MT_VI_WAIT", 16000, "Wait time (us) if Events Enabled");
 	ConfigSetDefaultBool(g_CoreConfig,"MT_VI_DMSG", 0, "Print Debug Messages");
 
 	ConfigSetDefaultInt(g_CoreConfig, "MT_AI_PRIO", 15, "\n# Priority of Thread");
