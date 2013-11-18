@@ -448,15 +448,6 @@ static m64p_error plugin_connect_rsp(m64p_dynlib_handle plugin_handle)
     return M64ERR_SUCCESS;
 }
 
-#include "r4300/event.h"
-#include "r4300/interupt.h"
-
-void Event_DList(void)
-{
-	Event_Send(VI_INT_DLIST);
-	Event_ReceiveAll(VI_INT_DONE);
-}
-
 static m64p_error plugin_start_rsp(void)
 {
     /* fill in the RSP_INFO data structure */
@@ -482,7 +473,7 @@ static m64p_error plugin_start_rsp(void)
     rsp_info.DPC_PIPEBUSY_REG = &dpc_register.dpc_pipebusy;
     rsp_info.DPC_TMEM_REG = &dpc_register.dpc_tmem;
     rsp_info.CheckInterrupts = EmptyFunc;
-    rsp_info.ProcessDlistList = Event_DList;
+    rsp_info.ProcessDlistList = gfx.processDList;
     rsp_info.ProcessAlistList = audio.processAList;
     rsp_info.ProcessRdpList = gfx.processRDPList;
     rsp_info.ShowCFB = gfx.showCFB;

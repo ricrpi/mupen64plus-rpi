@@ -74,7 +74,7 @@ extern uint32_t SDL_GetTicks(void);
 /* Number of buffers used by Audio*/
 #define DEFAULT_NUM_BUFFERS 100
 
-#define DEFAULT_DYNAMIC_FREQUENCY 1
+
 #define SAMPLE_SIZE_BITS 	16
 #define NUM_CHANNELS		2
 
@@ -133,8 +133,6 @@ static unsigned int OutputFreq = 44100;
 static unsigned int uiLatency = DEFAULT_LATENCY;
 
 static unsigned int uiNumBuffers = DEFAULT_NUM_BUFFERS;
-
-static unsigned int bDynamicFrequency = DEFAULT_DYNAMIC_FREQUENCY;
 
 // volume to scale the audio by, range of 0..100
 // if muted, this holds the volume when not muted
@@ -282,8 +280,7 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle, void *Con
 	ConfigSetDefaultBool(l_ConfigAudio, "SWAP_CHANNELS",        0,                     		"Swaps left and right channels");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"SECONDARY_BUFFER_SIZE",SECONDARY_BUFFER_SIZE, 		"Number of output samples per Audio callback. This is SDL's hardware buffer.");
     ConfigSetDefaultInt(l_ConfigAudio, 	"OUTPUT_PORT",   		OUTPUT_PORT,   				"Audio output to go to (0) Analogue jack, (1) HDMI");
-	ConfigSetDefaultInt(l_ConfigAudio,  "DEFAULT_MODE",     	DEFAULT_MODE,          		"Audio Output Frequncy mode: 0 = Rom Frequency, 1 ROM Frequency if supported (HDMI only), 2 = Standard frequency < Rom Frequency, 3 = Standard frequency > Rom Frequency, [N] Force output frequency");
-	ConfigSetDefaultBool(l_ConfigAudio, "DYNAMIC_FREQUENCY",   	DEFAULT_DYNAMIC_FREQUENCY, 	"Enable Audio Frequency Load Scaling");
+	ConfigSetDefaultInt(l_ConfigAudio, "DEFAULT_MODE",     	    DEFAULT_MODE,          "Audio Output Frequncy mode: 0 = Rom Frequency, 1 ROM Frequency if supported (HDMI only), 2 = Standard frequency < Rom Frequency, 3 = Standard frequency > Rom Frequency, [N] Force output frequency");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"LATENCY",      		DEFAULT_LATENCY,           	"Desired Latency in ms");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"VOLUME_ADJUST",        5,                     		"Percentage change each time the volume is increased or decreased");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"VOLUME_DEFAULT",       80,                    		"Default volume when a game is started");
@@ -653,7 +650,7 @@ EXPORT void CALL AiLenChanged( void )
 	uint32_t 		uiAudioBytes;
 	static int32_t 	*pCurrentBuffer = NULL;
 	static uint32_t uiBufferIndex 	= 0;
-	volatile uint32_t *p;
+	volatile int32_t *p;
 
 	int oldsamplerate, newsamplerate;
 
@@ -665,7 +662,7 @@ EXPORT void CALL AiLenChanged( void )
 
 	uiAudioBytes = (uint32_t)(*AudioInfo.AI_LEN_REG);
 
-	p = (uint32_t*)(AudioInfo.RDRAM + (*AudioInfo.AI_DRAM_ADDR_REG & 0xFFFFFF));
+	p = (int32_t*)(AudioInfo.RDRAM + (*AudioInfo.AI_DRAM_ADDR_REG & 0xFFFFFF));
 
 	if (pCurrentBuffer == NULL)
     	{
@@ -743,20 +740,10 @@ EXPORT void CALL AiLenChanged( void )
 	else // newsamplerate < oldsamplerate, this only happens when speed_factor > 1
 	{
 
-		uint32_t inc  = ((oldsamplerate << 10) / newsamplerate);
-		
-		if (bDynamicFrequency)
-		{
-			uint32_t latency = audioplay_get_latency(st);
-		
-			if (latency < uiLatency) //sanity check
-				inc = ((oldsamplerate << 10) * uiLatency) / (newsamplerate * (2 * uiLatency - latency));
-						
-			if ((inc >> 10) < 1) inc = ((oldsamplerate << 10) / newsamplerate);
-		}
 	#if 1
-		uint32_t j = 0;
-		uint32_t * start = (uint32_t*)p;
+		int j = 0;
+		int inc = ((oldsamplerate << 10) / newsamplerate);
+		int * start = p;
 
 		while ((j>>8) < uiAudioBytes )
 		{
@@ -781,7 +768,8 @@ EXPORT void CALL AiLenChanged( void )
 
 		}
 	#else
-	
+	int scaledR = ((oldsamplerate << 10) / newsamplerate);
+
 	asm volatile(	"push {r0, r1, r2, r3, r4, r5, r6, r7, r8, r9}	\n"
 			"mov r0, %0			\n" // pCurrentBuffer
 			"mov r1, %1 			\n" // uiBufferIndex
@@ -823,7 +811,7 @@ EXPORT void CALL AiLenChanged( void )
 			"4:				\n" // tidy up
 			"pop {r0, r1, r2, r3, r4, r5, r6, r7, r8, r9}	\n"
 			: "+r" (pCurrentBuffer), "+r" (uiBufferIndex)
-			: "r" (p), "r" (uiAudioBytes), "r"(inc), "r"(uiSecondarySamples)
+			: "r" (p), "r" (uiAudioBytes), "r"(scaledR), "r"(uiSecondarySamples)
 			: "cc"
 			);
 
@@ -928,7 +916,7 @@ static void InitializeAudio(int freq)
 				}
 				else
 				{
-					DebugMessage(M64MSG_WARNING, "HDMI may not support Audio at %d Hz", OutputFreq);
+					DebugMessage(M64MSG_WARNING, "HDMI does not support Audio at %d Hz", OutputFreq);
 				}
 			}
 			else
@@ -976,7 +964,6 @@ static void ReadConfig(void)
 	bSwapChannels = 			ConfigGetParamBool(l_ConfigAudio, "SWAP_CHANNELS");
 	uiSecondaryBufferSamples = 	ConfigGetParamInt(l_ConfigAudio, "SECONDARY_BUFFER_SIZE");
 	uiOutputPort = 				ConfigGetParamInt(l_ConfigAudio, "OUTPUT_PORT");
-	bDynamicFrequency = 		ConfigGetParamBool(l_ConfigAudio, "DYNAMIC_FREQUENCY");
 	uiLatency = 				ConfigGetParamInt(l_ConfigAudio, "LATENCY");
 	VolDelta = 					ConfigGetParamInt(l_ConfigAudio, "VOLUME_ADJUST");
 	VolPercent = 				ConfigGetParamInt(l_ConfigAudio, "VOLUME_DEFAULT");

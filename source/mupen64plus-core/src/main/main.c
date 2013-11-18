@@ -60,9 +60,6 @@
 #include <sched.h>
 #include <errno.h>
 
-#include <pthread.h>
-
-
 #ifdef DBG
 #include "debugger/dbg_types.h"
 #include "debugger/debugger.h"
@@ -202,57 +199,6 @@ int main_set_core_defaults(void)
     ConfigSetDefaultString(g_CoreConfig, "SharedDataPath", "", "Path to a directory to search when looking for shared data files");
 	ConfigSetDefaultInt(g_CoreConfig, "Scheduler", 10, "Scheduling policy. 0 for Standard (SCHED_OTHER), 1-99 RealTime FIFO policy with Priority of [N]");
     
-//---------------------------------------------------------------------------------------
-	// Multi-threaded options
-	ConfigSetDefaultBool(g_CoreConfig,"MT_YIELD_EVENT_SEND", 1, "\n# When a thread sends an event, call sched_yield() to run highest priority thread");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_EVENT_DMSG", 0, "Print Event Debug Messages");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_USE_SPECIAL_INT", 1, "Use SPECIAL_INTs. I think these mark when the Count vaiable wraps at 0x10000000");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_USE_COMPARE_INT", 1, "Use COMPARE_INTs");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_USE_CHECK_INT", 1, "call to check_interupt() raises a COMPARE_INT");
-	
-	ConfigSetDefaultInt(g_CoreConfig, "MT_SYSTEM_TIMER_PRIO", 20, "\n# Priority of the System Timer Thread");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_SYSTEM_TIMER_EVENTS", 0, "System Timer calls gen_interupt()");
-	ConfigSetDefaultInt(g_CoreConfig, "MT_SYSTEM_TIMER_WAIT", 2000, "Wait time (us) if Events Enabled");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_SYSTEM_TIMER_DMSG", 0, "Print Debug Messages");
-
-	ConfigSetDefaultInt(g_CoreConfig, "MT_VI_PRIO", 16, "\n# Priority of Thread");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_VI_EVENTS", 0, "Use Events for Screen Update");
-	ConfigSetDefaultInt(g_CoreConfig, "MT_VI_WAIT", 16000, "Wait time (us) if Events Enabled");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_VI_DMSG", 0, "Print Debug Messages");
-
-	ConfigSetDefaultInt(g_CoreConfig, "MT_AI_PRIO", 15, "\n# Priority of Thread");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_AI_EVENTS", 0, "Use Events for Audio");
-	ConfigSetDefaultInt(g_CoreConfig, "MT_AI_WAIT", 16000, 	 "Wait time (us) if Events Enabled");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_AI_DMSG", 0, "Print Debug Messages");
-
-	ConfigSetDefaultInt(g_CoreConfig, "MT_PI_PRIO", 14, "\n# Priority of Thread");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_PI_EVENTS", 0, "Use Events for Interrupt");
-	ConfigSetDefaultInt(g_CoreConfig, "MT_PI_WAIT", 16000, "Wait time (us) if Events Enabled");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_PI_DMSG", 0, "Print Debug Messages");
-	
-	ConfigSetDefaultInt(g_CoreConfig, "MT_SI_PRIO", 13, "\n# Priority of Thread");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_SI_EVENTS", 0, "Use Events for Interrupt");
-	ConfigSetDefaultInt(g_CoreConfig, "MT_SI_WAIT", 2000, "Wait time (us) if Events Enabled");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_SI_DMSG", 0, "Print Debug Messages");
-
-	ConfigSetDefaultInt(g_CoreConfig, "MT_DP_PRIO", 12, "\n# Priority of Thread");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_DP_EVENTS", 0, "Use Events for Interrupt");
-	ConfigSetDefaultInt(g_CoreConfig, "MT_DP_WAIT", 2000, "Wait time (us) if Events Enabled");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_DP_DMSG", 0, "Print Debug Messages");
-
-	ConfigSetDefaultInt(g_CoreConfig, "MT_SP_PRIO", 11, "\n# Priority of Thread");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_SP_EVENTS", 0, "Use Events for Interrupt");
-	ConfigSetDefaultInt(g_CoreConfig, "MT_SP_WAIT", 2000, "Wait time (us) if Events Enabled");
-	ConfigSetDefaultBool(g_CoreConfig,"MT_SP_DMSG", 0, "Print Debug Messages");
-
-	ConfigSetDefaultBool(g_CoreConfig,"MT_NMI_EVENTS", 0, "\n# Use Events for Interrupt");
-	ConfigSetDefaultInt(g_CoreConfig, "MT_NMI_WAIT", 5000000, "Wait time (us) if Events Enabled");
-
-	ConfigSetDefaultBool(g_CoreConfig,"MT_HW2_EVENTS", 0, "\n# Use Events for Interrupt");
-	ConfigSetDefaultInt(g_CoreConfig, "MT_HW2_WAIT", 2000, "Wait time (us) if Events Enabled");
-
-//---------------------------------------------------------------------------------------
-
 	/* handle upgrades */
     if (bUpgrade)
     {
@@ -693,8 +639,7 @@ m64p_error main_reset(int do_hard_reset)
 
 static void video_plugin_render_callback(int bScreenRedrawn)
 {
-    static int bOSD = -1; 
-	if (bOSD == -1 ) bOSD = ConfigGetParamBool(g_CoreConfig, "OnScreenDisplay");
+    int bOSD = ConfigGetParamBool(g_CoreConfig, "OnScreenDisplay");
 
     // if the flag is set to take a screenshot, then grab it now
     if (l_TakeScreenshot != 0)
@@ -704,7 +649,7 @@ static void video_plugin_render_callback(int bScreenRedrawn)
 //        if (!bOSD || bScreenRedrawn)
 		if (bScreenRedrawn)
         {
-			TakeScreenshot(l_TakeScreenshot - 1);  // current frame number +1 is in l_TakeScreenshot
+            TakeScreenshot(l_TakeScreenshot - 1);  // current frame number +1 is in l_TakeScreenshot
             l_TakeScreenshot = 0; // reset flag
         }
     }
@@ -788,62 +733,11 @@ void new_vi(void)
 */
 m64p_error main_run(void)
 {
-
-	mt_o.bEventYields = ConfigGetParamBool(g_CoreConfig,"MT_YIELD_EVENT_SEND");
-	mt_o.bEventDMsg	= ConfigGetParamBool(g_CoreConfig,"MT_EVENT_DMSG");
-	mt_o.bSPECIAL_INT = ConfigGetParamBool(g_CoreConfig,"MT_USE_SPECIAL_INT");
-	mt_o.bCOMPARE_INT = ConfigGetParamBool(g_CoreConfig,"MT_USE_COMPARE_INT");
-	mt_o.bCHECK_INT = ConfigGetParamBool(g_CoreConfig,"MT_USE_CHECK_INT");
-	
-	mt_s.uiPriority = ConfigGetParamInt(g_CoreConfig, "MT_SYSTEM_TIMER_PRIO");
-	mt_s.bUseEvents = ConfigGetParamBool(g_CoreConfig,"MT_SYSTEM_TIMER_EVENTS");
-	mt_s.uiWait	 	= ConfigGetParamInt(g_CoreConfig, "MT_SYSTEM_TIMER_WAIT");
-	mt_s.bPrintDMsg = ConfigGetParamBool(g_CoreConfig,"MT_SYSTEM_TIMER_DMSG");
-
-	mt_vi.uiPriority = ConfigGetParamInt(g_CoreConfig, "MT_VI_PRIO");
-	mt_vi.bUseEvents = ConfigGetParamBool(g_CoreConfig,"MT_VI_EVENTS");
-	mt_vi.uiWait	 	= ConfigGetParamInt(g_CoreConfig, "MT_VI_WAIT");
-	mt_vi.bPrintDMsg = ConfigGetParamBool(g_CoreConfig,"MT_VI_DMSG");
-
-	mt_ai.uiPriority = ConfigGetParamInt(g_CoreConfig, "MT_AI_PRIO");
-	mt_ai.bUseEvents = ConfigGetParamBool(g_CoreConfig,"MT_AI_EVENTS");
-	mt_ai.uiWait	 	= ConfigGetParamInt(g_CoreConfig, "MT_AI_WAIT");
-	mt_ai.bPrintDMsg = ConfigGetParamBool(g_CoreConfig,"MT_AI_DMSG");
-
-	mt_pi.uiPriority = ConfigGetParamInt(g_CoreConfig, "MT_PI_PRIO");
-	mt_pi.bUseEvents = ConfigGetParamBool(g_CoreConfig,"MT_PI_EVENTS");
-	mt_pi.uiWait	 = ConfigGetParamInt(g_CoreConfig, "MT_PI_WAIT");
-	mt_pi.bPrintDMsg = ConfigGetParamBool(g_CoreConfig,"MT_PI_DMSG");
-
-	mt_si.uiPriority = ConfigGetParamInt(g_CoreConfig, "MT_SI_PRIO");
-	mt_si.bUseEvents = ConfigGetParamBool(g_CoreConfig,"MT_SI_EVENTS");
-	mt_si.uiWait	 = ConfigGetParamInt(g_CoreConfig, "MT_SI_WAIT");
-	mt_si.bPrintDMsg = ConfigGetParamBool(g_CoreConfig,"MT_SI_DMSG");
-
-	mt_dp.uiPriority = ConfigGetParamInt(g_CoreConfig, "MT_DP_PRIO");
-	mt_dp.bUseEvents = ConfigGetParamBool(g_CoreConfig,"MT_DP_EVENTS");
-	mt_dp.uiWait	 = ConfigGetParamInt(g_CoreConfig, "MT_DP_WAIT");
-	mt_dp.bPrintDMsg = ConfigGetParamBool(g_CoreConfig,"MT_DP_DMSG");
-
-	mt_sp.uiPriority = ConfigGetParamInt(g_CoreConfig, "MT_SP_PRIO");
-	mt_sp.bUseEvents = ConfigGetParamBool(g_CoreConfig,"MT_SP_EVENTS");
-	mt_sp.uiWait	 = ConfigGetParamInt(g_CoreConfig, "MT_SP_WAIT");
-	mt_sp.bPrintDMsg = ConfigGetParamBool(g_CoreConfig,"MT_SP_DMSG");
-
-	mt_nmi.bUseEvents = ConfigGetParamBool(g_CoreConfig,"MT_NMI_EVENTS");
-	mt_nmi.uiWait	  = ConfigGetParamInt(g_CoreConfig, "MT_NMI_WAIT");
-
-	mt_hw2.bUseEvents = ConfigGetParamBool(g_CoreConfig,"MT_HW2_EVENTS");
-	mt_hw2.uiWait	  = ConfigGetParamInt(g_CoreConfig, "MT_HW2_WAIT");
-
-
     /* take the r4300 emulator mode from the config file at this point and cache it in a global variable */
     r4300emu = ConfigGetParamInt(g_CoreConfig, "R4300Emulator");
-	//uint32_t SchedulerPriority = ConfigGetParamInt(g_CoreConfig, "Scheduler");
-
-	DebugMessage(M64MSG_INFO,"Main Thread id is %lu", pthread_self());	
-
-	/*if (SchedulerPriority > 0)
+	uint32_t SchedulerPriority = ConfigGetParamInt(g_CoreConfig, "Scheduler");
+	
+	if (SchedulerPriority > 0)
 	{
 		if (SchedulerPriority > sched_get_priority_max(SCHED_FIFO)) SchedulerPriority = 20;
 
@@ -875,7 +769,7 @@ m64p_error main_run(void)
 		}
 		
 		
-	}*/
+	}
 
     /* set some other core parameters based on the config file values */
     savestates_set_autoinc_slot(ConfigGetParamBool(g_CoreConfig, "AutoStateSlotIncrement"));
@@ -894,10 +788,10 @@ m64p_error main_run(void)
     }
 
     // Attach rom to plugins
- //   if (!gfx.romOpen())
-//    {
- //       free_memory(); return M64ERR_PLUGIN_FAIL;
-//    }
+    if (!gfx.romOpen())
+    {
+        free_memory(); return M64ERR_PLUGIN_FAIL;
+    }
     if (!audio.romOpen())
     {
         gfx.romClosed(); free_memory(); return M64ERR_PLUGIN_FAIL;

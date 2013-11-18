@@ -342,22 +342,23 @@ EXPORT m64p_error CALL VidExt_GL_GetAttribute(m64p_GLattr Attr, int *pValue)
 
 EXPORT m64p_error CALL VidExt_GL_SwapBuffers(void)
 {
+/*
+	static uint32_t count	= 0;
+	static uint32_t sum		= 0, sum2 = 0;
+	static uint32_t time =0 , time2 =0;
 
-	//static uint32_t count	= 0;
-	//static uint32_t sum		= 0, sum2 = 0;
-	//static uint32_t time =0 , time2 =0;
-
-	//time2 = SDL_GetTicks();
-	//sum2 += (time2 - time);
+	time2 = SDL_GetTicks();
+	sum2 += (time2 - time);
 	//Draw(&esContext);
     // call video extension override if necessary 
-    
+ */   
 	if (l_VideoExtensionActive)
         return (*l_ExternalVideoFuncTable.VidExtFuncGLSwapBuf)();
 
     //eglSwapBuffers(esContext.eglDisplay, esContext.eglSurface);
 	RPI_SwapBuffers();
-	/*
+	
+/*
 	time = SDL_GetTicks();
 	
 	count ++;

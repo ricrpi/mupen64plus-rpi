@@ -24,8 +24,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "Profiler.h"
 
-#include <pthread.h>
-
 #define ALPHA_TEST "    if(gl_FragColor.a < AlphaRef) discard;                        \n"
 //#define ALPHA_TEST
 
@@ -553,7 +551,7 @@ int COGL_FragmentProgramCombiner::ParseDecodedMux()
             char Log[1024];
             GLint nLength;
             glGetShaderInfoLog(res.fragmentShaderID, 1024, &nLength, Log);
-            printf("%d Error compiling shader!\n %s", pthread_self(), oglNewFP);
+            printf("Error compiling shader!\n %s",oglNewFP);
             printf(Log);
         }
 
@@ -580,7 +578,7 @@ int COGL_FragmentProgramCombiner::ParseDecodedMux()
             char Log[1024];
             GLint nLength;
             glGetShaderInfoLog(res.fragmentShaderID, 1024, &nLength, Log);
-            printf("%d Error linking program!\n", pthread_self());
+            printf("Error linking program!\n");
             printf("%s\n",Log);
         }
 

@@ -54,11 +54,6 @@ void reset_hard(void)
 
 void reset_soft(void)
 {
-	if(mt_hw2.bUseEvents){
-		Event_Send(HW2_INT_PENDING);
-	}else{
-    		add_interupt_event(HW2_INT, 0);  /* Hardware 2 Interrupt immediately */
-		add_interupt_event(NMI_INT, 50000000);  /* Non maskable Interrupt after 1/2 second */
-	}
-
+    add_interupt_event(HW2_INT, 0);  /* Hardware 2 Interrupt immediately */
+    add_interupt_event(NMI_INT, 50000000);  /* Non maskable Interrupt after 1/2 second */
 }
