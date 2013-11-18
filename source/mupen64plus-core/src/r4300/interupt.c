@@ -58,7 +58,7 @@
 #define DEBUG_PRINT(...)
 #endif
 
-//#define USE_SPECIAL
+#define USE_SPECIAL
 //#define USE_COMPARE
 #define USE_CHECK
 //#define NEW_COUNT
@@ -99,8 +99,8 @@ static interupt_queue* queue_malloc(size_t Bytes)
 			DebugMessage(M64MSG_VERBOSE, "/mupen64plus-core/src/4300/interupt.c: QUEUE_SIZE too small");
 			bNotified = 1;
 		}
-		
- 		return malloc(Bytes);	
+
+ 		return malloc(Bytes);
 	}
 	interupt_queue* newQueue = qstack[qstackindex];
 	qstackindex ++;
@@ -177,7 +177,8 @@ static int before_event(unsigned int evt1, unsigned int evt2, int type2)
         {
             if((Count - evt2) < 0x10000000)
             {
-               /* switch(type2)
+#ifdef USE_SPECIAL
+ 				switch(type2)
                 {
                     case SPECIAL_INT:
                         if(SPECIAL_done) return 1;
@@ -185,8 +186,10 @@ static int before_event(unsigned int evt1, unsigned int evt2, int type2)
                         break;
                     default:
                         return 0;
-                }*/
+                }
+#else
 			return 0;
+#endif
             }
             else return 1;
         }
@@ -206,11 +209,11 @@ void add_interupt_event(int type, unsigned int delay)
     int special = 0;
 #endif
     interupt_queue *aux = q;
-   
+
 #ifdef USE_SPECIAL
     if(type == SPECIAL_INT /*|| type == COMPARE_INT*/) special = 1;
 	if(Count > 0x80000000) SPECIAL_done = 0;
-#endif   
+#endif
 
 	DEBUG_PRINT("add_interupt_event(%d,%d)\n",type,delay);
 
@@ -559,7 +562,9 @@ void gen_interupt(void)
         case SPECIAL_INT:
             if (Count > 0x10000000) return;
             remove_interupt_event();
+#ifdef USE_SPECIAL
             add_interupt_event_count(SPECIAL_INT, 0);
+#endif
             return;
             break;
         case VI_INT:
@@ -626,10 +631,12 @@ X11_PumpEvents();
 
         case COMPARE_INT:
             remove_interupt_event();
-            Count+=2;
+            
+#ifdef USE_COMPARE
+			Count+=2;
             add_interupt_event_count(COMPARE_INT, Compare);
-            Count-=2;
-
+			Count-=2;
+#endif       
             Cause = (Cause | 0x8000) & 0xFFFFFF83;
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
@@ -667,7 +674,7 @@ X11_PumpEvents();
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
             break;
-    
+
         case AI_INT:
             if (ai_register.ai_status & 0x80000000) // full
             {
@@ -677,7 +684,8 @@ X11_PumpEvents();
                 ai_register.current_delay = ai_register.next_delay;
                 ai_register.current_len = ai_register.next_len;
                 add_interupt_event_count(AI_INT, ai_event+ai_register.next_delay);
-         
+
+		DebugMessage(M64MSG_VERBOSE, "AI_INT");
                 MI_register.mi_intr_reg |= 0x04;
                 if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
                     Cause = (Cause | 0x400) & 0xFFFFFF83;
