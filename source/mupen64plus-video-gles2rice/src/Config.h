@@ -207,6 +207,7 @@ typedef struct {
     BOOL    bEnableSSE;
     BOOL    bEnableVertexShader;
     BOOL    bSkipFrame;
+	BOOL    bSkipUpdate;
     BOOL    bFullTMEM;
     BOOL    bUseFullTMEM;
 

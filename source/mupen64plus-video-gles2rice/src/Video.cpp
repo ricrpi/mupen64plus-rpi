@@ -787,7 +787,8 @@ EXPORT void CALL UpdateScreen(void)
             lastTick = nowTick;
         }
     }
-	if (!options.bSkipFrame || update) UpdateScreenStep2();
+
+	if (!options.bSkipUpdate || update) UpdateScreenStep2();
 	update = !update;
 	
 	Profile_end();
