@@ -600,11 +600,13 @@ int RPI_NextXEvent(XEvent* xEvent)
 			/* keep reading til there's no more*/
 			if (res > 0)
 			{
-				DEBUG_PRINT("keyboard input: %d, 0x%x 0x%x -> SDL key %d %d\n",res, buf[0], buf[1], RAWtoSDL[buf[0]&0x7F], RAWtoSDL[buf[1]&0x7F]);
+				//DEBUG_PRINT("keyboard input: %d, 0x%x 0x%x -> SDL key %d %d\n",res, buf[0], buf[1], RAWtoSDL[buf[0]&0x7F], RAWtoSDL[buf[1]&0x7F]);
 
 				//escape key
 				if (buf[0] == 0xe0)
 				{
+					read(0, &buf[1], 1);
+
 					byteToRead = 1;
 					switch (buf[1]&0x7F)
 					{
