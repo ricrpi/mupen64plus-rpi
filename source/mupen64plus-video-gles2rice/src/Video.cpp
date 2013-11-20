@@ -769,7 +769,7 @@ EXPORT int CALL RomOpen(void)
 //---------------------------------------------------------------------------------------
 EXPORT void CALL UpdateScreen(void)
 {
-	//static bool update= true;
+	static bool update= true;
 	Profile_start("UpdateScreen");
 	if(options.bShowFPS)
     {
@@ -787,9 +787,9 @@ EXPORT void CALL UpdateScreen(void)
             lastTick = nowTick;
         }
     }
-	//if (!options.bSkipFrame || update) 
-	UpdateScreenStep2();
-	//update = !update;
+
+	if (!options.bSkipUpdate || update) UpdateScreenStep2();
+	update = !update;
 	
 	Profile_end();
 }
