@@ -318,19 +318,19 @@ doSdlKeys(unsigned char* keystate)
     }
 }
 
-static unsigned char DataCRC( unsigned char *Data, int iLenght )
+static unsigned char DataCRC( unsigned char *Data, int iLength )
 {
     unsigned char Remainder = Data[0];
-
+	unsigned char Remainder2 = 0; 
     int iByte = 1;
     unsigned char bBit = 0;
 
-    while( iByte <= iLenght )
+    while( iByte <= iLength )
     {
         int HighBit = ((Remainder & 0x80) != 0);
         Remainder = Remainder << 1;
 
-        Remainder += ( iByte < iLenght && Data[iByte] & (0x80 >> bBit )) ? 1 : 0;
+        Remainder += ( iByte < iLength && Data[iByte] & (0x80 >> bBit )) ? 1 : 0;
 
         Remainder ^= (HighBit) ? 0x85 : 0;
 
@@ -338,7 +338,18 @@ static unsigned char DataCRC( unsigned char *Data, int iLenght )
         iByte += bBit/8;
         bBit %= 8;
     }
+/*
+	iByte = 0;
 
+	while (iByte < iLength)
+	{
+		Remainder2 ^= Data[iByte];
+		Remainder2 = Remainder << 2;
+	}
+
+
+	DebugMessage(M64MSG_INFO, "DataCRC called. Remainder = %d %d", Remainder, Remainder2);
+*/
     return Remainder;
 }
 
