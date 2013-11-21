@@ -1,5 +1,6 @@
 
 #include <stdlib.h>
+#include <stdio.h>
 #include "OpenGL.h"
 #include "ShaderCombiner.h"
 #include "Common.h"
@@ -400,17 +401,28 @@ void _glcompiler_error(GLint shader)
 {
     int len, i;
     char* log;
+
 	
+	if (!glIsShader(shader))
+	{
+		printf("Not a shader object\n");
+		return;
+	}
+
     glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &len);
-   	if (len >0 && len < 30000)
+   	if (len >= 0 && len < 300000)
 	{
 		log = (char*) malloc(len + 1);
 	    glGetShaderInfoLog(shader, len, &i, log);
 	    log[len] = 0;
 		LOG(LOG_ERROR, "COMPILE ERROR: %s \n", log);
+		free(log);
+	}
+	else
+	{
+		printf("Failed to get GLES2 compile error. len was %d\n", len);
 	}
     
-    free(log);
 }
 
 void _gllinker_error(GLint program)
@@ -418,16 +430,27 @@ void _gllinker_error(GLint program)
     int len, i;
     char* log;
 
+	if (!glIsProgram(program))
+	{
+		printf("Not a program object\n");
+		return;
+	}
+
     glGetProgramiv(program, GL_INFO_LOG_LENGTH, &len);
-	if (len >0 && len < 30000)
+	if (len >= 0 && len < 300000)
 	{    
 		log = (char*) malloc(len + 1);
     	glGetProgramInfoLog(program, len, &i, log);
    		log[len] = 0;
 		LOG(LOG_ERROR, "LINK ERROR: %s \n", log);
+    	free(log);
     }
+	else
+	{
+		printf("Failed to get GLES2 program error. len was %d\n", len);
+	}
 	
-    free(log);
+
 };
 
 void _locate_attributes(ShaderProgram *p)
@@ -600,7 +623,7 @@ void ShaderCombiner_Init()
     LOG(LOG_VERBOSE, "%s", buff);
     LOG(LOG_VERBOSE, "=============================================================\n");
 #endif
-
+	buff[4095] = 0;
     src[0] = buff;
     _vertex_shader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(_vertex_shader, 1, (const char**) src, NULL);
@@ -608,8 +631,13 @@ void ShaderCombiner_Init()
     glGetShaderiv(_vertex_shader, GL_COMPILE_STATUS, &success);
     if (!success)
     {
+		printf("Shader Source:\n%s\n", buff);
         _glcompiler_error(_vertex_shader);
     }
+	else
+	{
+		printf("%d Shader COMPILED\n", __LINE__);
+	}
 };
 
 void ShaderCombiner_DeletePrograms(ShaderProgram *prog)
@@ -813,8 +841,13 @@ ShaderProgram *ShaderCombiner_Compile(DecodedMux *dmux, int flags)
     glGetShaderiv(prog->fragment, GL_COMPILE_STATUS, &success);
     if (!success)
     {
+		printf("%d Shader Source:\n%s\n", __LINE__, frag);
         _glcompiler_error(prog->fragment);
     }
+	else
+	{
+		printf("%d Shader COMPILED\n", __LINE__);
+	}
 
     //link
     _locate_attributes(prog);
@@ -826,7 +859,10 @@ ShaderProgram *ShaderCombiner_Compile(DecodedMux *dmux, int flags)
     {
         _gllinker_error(prog->program);
     }
-
+	else
+	{
+		printf("%d Program COMPILED\n", __LINE__);
+	}
     //remove fragment shader:
     glDeleteShader(prog->fragment);
 
