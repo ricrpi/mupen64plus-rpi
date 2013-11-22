@@ -3,7 +3,7 @@
 
 #include "m64p_config.h"
 #include "stdio.h"
-
+#include "m64p_vidext.h"
 
 #ifndef min
 #define min(a,b) ((a) < (b) ? (a) : (b))
@@ -16,6 +16,7 @@
 #define PLUGIN_API_VERSION 0x020200
 
 extern ptr_ConfigGetSharedDataFilepath ConfigGetSharedDataFilepath;
+extern ptr_VidExt_GL_SwapBuffers       CoreVideo_GL_SwapBuffers;
 
 extern void (*CheckInterrupts)( void );
 extern void (*renderCallback)();

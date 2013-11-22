@@ -1280,6 +1280,7 @@ void OGL_SwapBuffers()
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (float*)vert + 2);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
+		if (CoreVideo_GL_SwapBuffers) CoreVideo_GL_SwapBuffers();
         //Android_JNI_SwapWindow(); // paulscode, fix for black-screen bug
 
         glBindFramebuffer(GL_FRAMEBUFFER, OGL.framebuffer.fb);
@@ -1289,7 +1290,8 @@ void OGL_SwapBuffers()
     }
     else
     {
-       // Android_JNI_SwapWindow(); // paulscode, fix for black-screen bug
+		if (CoreVideo_GL_SwapBuffers) CoreVideo_GL_SwapBuffers();
+       	// Android_JNI_SwapWindow(); // paulscode, fix for black-screen bug
     }
 
     // if emulator defined a render callback function, call it before

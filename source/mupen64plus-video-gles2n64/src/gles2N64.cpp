@@ -23,6 +23,8 @@
 //#include "ae_bridge.h"
 
 ptr_ConfigGetSharedDataFilepath ConfigGetSharedDataFilepath = NULL;
+ptr_VidExt_GL_SwapBuffers        CoreVideo_GL_SwapBuffers = NULL;
+
 
 static FrameSkipper frameSkipper;
 
@@ -35,7 +37,8 @@ extern "C" {
 EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle,
         void *Context, void (*DebugCallback)(void *, int, const char *))
 {
-    ConfigGetSharedDataFilepath = (ptr_ConfigGetSharedDataFilepath)dlsym(CoreLibHandle, "ConfigGetSharedDataFilepath");
+    ConfigGetSharedDataFilepath = (ptr_ConfigGetSharedDataFilepath)	dlsym(CoreLibHandle, "ConfigGetSharedDataFilepath");
+	CoreVideo_GL_SwapBuffers 	= (ptr_VidExt_GL_SwapBuffers) 		dlsym(CoreLibHandle, "VidExt_GL_SwapBuffers");
 
 #ifdef __NEON_OPT
     if (android_getCpuFamily() == ANDROID_CPU_FAMILY_ARM &&
