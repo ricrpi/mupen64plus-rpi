@@ -257,7 +257,7 @@ EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType, int *Plugi
 static void
 doSdlKeys(unsigned char* keystate)
 {
-    int c, b, axis_val, axis_max_val;
+    int c, b, axis_val = 0, axis_max_val;
     static int grabmouse = 1, grabtoggled = 0;
 
     axis_max_val = 80;
@@ -272,18 +272,22 @@ doSdlKeys(unsigned char* keystate)
         {
             if( controller[c].button[b].key == SDL_SCANCODE_UNKNOWN || ((int) controller[c].button[b].key) < 0)
                 continue;
-            if( keystate[controller[c].button[b].key] )
-                controller[c].buttons.Value |= button_bits[b];
+            if( keystate[controller[c].button[b].key] ){
+#ifdef _DEBUG
+            	DebugMessage(M64MSG_INFO, "Controller %d got button %d",c, b);
+#endif
+				controller[c].buttons.Value |= button_bits[b];
+			}
         }
         for( b = 0; b < 2; b++ )
         {
             // from the N64 func ref: The 3D Stick data is of type signed char and in
             // the range between 80 and -80. (32768 / 409 = ~80.1)
-            if( b == 0 )
+           /* if( b == 0 )
                 axis_val = controller[c].buttons.X_AXIS;
             else
                 axis_val = -controller[c].buttons.Y_AXIS;
-
+*/
             if( controller[c].axis[b].key_a != SDL_SCANCODE_UNKNOWN && ((int) controller[c].axis[b].key_a) > 0)
                 if( keystate[controller[c].axis[b].key_a] )
                     axis_val = -axis_max_val;
@@ -471,12 +475,13 @@ EXPORT void CALL GetKeys( int Control, BUTTONS *Keys )
 {
     static int mousex_residual = 0;
     static int mousey_residual = 0;
+
     int b, axis_val;
     SDL_Event event;
     unsigned char mstate;
 
     // Handle keyboard input first
-    doSdlKeys(SDL_GetKeyboardState(NULL));
+    //doSdlKeys(SDL_GetKeyboardState(NULL));
     doSdlKeys(myKeyState);
 
     // read joystick state

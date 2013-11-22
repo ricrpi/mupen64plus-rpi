@@ -224,7 +224,7 @@ LINK.o = $(Q_LD)$(CC) $(CFLAGS) $(LDFLAGS) $(TARGET_ARCH)
 
 # set special flags for given Makefile parameters
 ifeq ($(DEBUG),1)
-  CFLAGS += -g
+  CFLAGS += -g -D_DEBUG
   INSTALL_STRIP_FLAG ?= 
 else
   ifneq ($(OS),OSX)
