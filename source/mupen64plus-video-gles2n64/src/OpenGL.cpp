@@ -133,6 +133,22 @@ void OGL_InitStates()
 {
     GLint   success;
 
+    const unsigned char* m_pRenderStr = glGetString(GL_RENDERER);
+    const unsigned char* m_pExtensionStr = glGetString(GL_EXTENSIONS);
+    const unsigned char* m_pVersionStr = glGetString(GL_VERSION);
+    const unsigned char* m_pVendorStr = glGetString(GL_VENDOR);
+
+    char m_strDeviceStats[200];
+    m64p_video_flags flags = M64VIDEOFLAG_SUPPORT_RESIZING;
+    if (CoreVideo_SetVideoMode(640, 480, 32, M64VIDEO_FULLSCREEN, flags) != M64ERR_SUCCESS)
+	{
+		printf("ERROR: Failed to set %i-bit video mode: %ix%i\n", 32, 640, 480);
+		return;
+	}
+
+    sprintf(m_strDeviceStats, "%.60s - %.128s : %.60s", m_pVendorStr, m_pRenderStr, m_pVersionStr);
+    printf("Using OpenGL: %s\n", m_strDeviceStats);
+
     glEnable( GL_CULL_FACE );
     glEnableVertexAttribArray( SC_POSITION );
     glEnable( GL_DEPTH_TEST );
