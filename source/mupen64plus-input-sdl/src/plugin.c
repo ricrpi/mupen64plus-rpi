@@ -257,7 +257,8 @@ EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType, int *Plugi
 static void
 doSdlKeys(unsigned char* keystate)
 {
-    int c, b, axis_val = 0, axis_max_val;
+    int c, b; 
+	char axis_val = 0, axis_max_val;
     static int grabmouse = 1, grabtoggled = 0;
 
     axis_max_val = 80;
@@ -288,13 +289,20 @@ doSdlKeys(unsigned char* keystate)
             else
                 axis_val = -controller[c].buttons.Y_AXIS;
 */
+			axis_val = 0;
+
             if( controller[c].axis[b].key_a != SDL_SCANCODE_UNKNOWN && ((int) controller[c].axis[b].key_a) > 0)
                 if( keystate[controller[c].axis[b].key_a] )
-                    axis_val = -axis_max_val;
-            if( controller[c].axis[b].key_b != SDL_SCANCODE_UNKNOWN && ((int) controller[c].axis[b].key_b) > 0)
+				{
+                	axis_val = -axis_max_val;
+					printf("%d key_a pressed %d\n", __LINE__, axis_val);
+				}
+           if( controller[c].axis[b].key_b != SDL_SCANCODE_UNKNOWN && ((int) controller[c].axis[b].key_b) > 0)
                 if( keystate[controller[c].axis[b].key_b] )
+				{
                     axis_val = axis_max_val;
-
+					printf("%d key_b pressed %d\n", __LINE__, axis_val);
+				}
             if( b == 0 )
                 controller[c].buttons.X_AXIS = axis_val;
             else
@@ -628,7 +636,7 @@ EXPORT void CALL GetKeys( int Control, BUTTONS *Keys )
     }
 
 #ifdef _DEBUG
-    DebugMessage(M64MSG_VERBOSE, "Controller #%d value: 0x%8.8X", Control, *(int *)&controller[Control].buttons );
+    DebugMessage(M64MSG_INFO, "Controller #%d axis %d,%d buttons: 0x%04X", Control, *((char *)&controller[Control].buttons + 2), *((char *)&controller[Control].buttons + 3), *(unsigned short*)&controller[Control].buttons );
 #endif
     *Keys = controller[Control].buttons;
 
