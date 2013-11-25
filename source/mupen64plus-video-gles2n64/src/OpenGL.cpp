@@ -32,6 +32,12 @@
 
 #include "FrameSkipper.h"
 
+//#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+
+#ifndef DEBUG_PRINT
+#define DEBUG_PRINT(...)
+#endif
+
 //// paulscode, function prototype missing from Yongzh's code
 void OGL_UpdateDepthUpdate();
 ////
@@ -132,22 +138,22 @@ extern void _glcompiler_error(GLint shader);
 void OGL_InitStates()
 {
     GLint   success;
+   
+    char m_strDeviceStats[200];
+    m64p_video_flags flags = M64VIDEOFLAG_SUPPORT_RESIZING;
+    if (CoreVideo_SetVideoMode(400, 240, 32, M64VIDEO_FULLSCREEN, flags) != M64ERR_SUCCESS)
+	{
+		printf("ERROR: Failed to set %i-bit video mode: %ix%i\n", 32, 400, 240); //TODO
+		return;
+	}
 
-    const unsigned char* m_pRenderStr = glGetString(GL_RENDERER);
+	const unsigned char* m_pRenderStr = glGetString(GL_RENDERER);
     const unsigned char* m_pExtensionStr = glGetString(GL_EXTENSIONS);
     const unsigned char* m_pVersionStr = glGetString(GL_VERSION);
     const unsigned char* m_pVendorStr = glGetString(GL_VENDOR);
 
-    char m_strDeviceStats[200];
-    m64p_video_flags flags = M64VIDEOFLAG_SUPPORT_RESIZING;
-    if (CoreVideo_SetVideoMode(640, 480, 32, M64VIDEO_FULLSCREEN, flags) != M64ERR_SUCCESS)
-	{
-		printf("ERROR: Failed to set %i-bit video mode: %ix%i\n", 32, 640, 480);
-		return;
-	}
-
     sprintf(m_strDeviceStats, "%.60s - %.128s : %.60s", m_pVendorStr, m_pRenderStr, m_pVersionStr);
-    printf("Using OpenGL: %s\n", m_strDeviceStats);
+    printf("Video: Using OpenGL: %s\n", m_strDeviceStats); //TODO should use core DebugMessage();
 
     glEnable( GL_CULL_FACE );
     glEnableVertexAttribArray( SC_POSITION );
@@ -179,7 +185,7 @@ void OGL_InitStates()
     //glPolygonOffset(0.2f, 0.2f);
 /////
     
-
+	DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
     glViewport(config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
 
     //create default shader program
@@ -243,6 +249,7 @@ void OGL_ResizeWindow(int x, int y, int width, int height)
     config.framebuffer.height = height;
     OGL_UpdateScale();
 
+	DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
     glViewport(config.framebuffer.xpos, config.framebuffer.ypos,
             config.framebuffer.width, config.framebuffer.height);
 }
@@ -481,6 +488,7 @@ void OGL_UpdateViewport()
     w = (int)(gSP.viewport.width * OGL.scaleX);
     h = (int)(gSP.viewport.height * OGL.scaleY);
 
+	DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, x, y, w, h);
     glViewport(x, y, w, h);
 }
 
@@ -963,6 +971,7 @@ void OGL_DrawRect( int ulx, int uly, int lrx, int lry, float *color)
         OGL.renderState = RS_RECT;
     }
 
+	DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
     glViewport(config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height );
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_CULL_FACE);
@@ -1023,6 +1032,7 @@ void OGL_DrawTexturedRect( float ulx, float uly, float lrx, float lry, float uls
         OGL.renderState = RS_TEXTUREDRECT;
     }
 
+	DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
     glViewport(config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
     glDisable(GL_CULL_FACE);
 
@@ -1267,6 +1277,8 @@ void OGL_SwapBuffers()
         glUseProgram(OGL.defaultProgram);
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_DEPTH_TEST);
+
+		DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, config.window.xpos, config.window.ypos, config.window.width, config.window.height);
         glViewport(config.window.xpos, config.window.ypos, config.window.width, config.window.height);
 
         static const float vert[] =

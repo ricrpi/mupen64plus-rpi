@@ -636,7 +636,7 @@ void ShaderCombiner_Init()
     }
 	else
 	{
-		printf("%d Shader COMPILED\n", __LINE__);
+		//printf("%d Shader COMPILED\n", __LINE__);
 	}
 };
 
@@ -846,7 +846,7 @@ ShaderProgram *ShaderCombiner_Compile(DecodedMux *dmux, int flags)
     }
 	else
 	{
-		printf("%d Shader COMPILED\n", __LINE__);
+		//printf("%d Shader COMPILED\n", __LINE__);
 	}
 
     //link
@@ -861,7 +861,7 @@ ShaderProgram *ShaderCombiner_Compile(DecodedMux *dmux, int flags)
     }
 	else
 	{
-		printf("%d Program COMPILED\n", __LINE__);
+		//printf("%d Program COMPILED\n", __LINE__);
 	}
     //remove fragment shader:
     glDeleteShader(prog->fragment);
