@@ -20,6 +20,9 @@
 #include "FrameSkipper.h"
 #include "ticks.h"
 
+//for SDL_GetTicks
+#include <SDL.h>
+
 //#include "ae_bridge.h"
 
 ptr_ConfigGetSharedDataFilepath ConfigGetSharedDataFilepath = NULL;
@@ -68,6 +71,7 @@ EXPORT m64p_error CALL PluginShutdown(void)
 {
     OGL_Stop();  // paulscode, OGL_Stop missing from Yongzh's code
     if (CoreVideo_Quit) CoreVideo_Quit();
+	return M64ERR_SUCCESS;
 }
 
 EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType,
@@ -239,6 +243,21 @@ EXPORT void CALL UpdateScreen (void)
 
     if (OGL.mustRenderDlist)
     {
+		if(config.printFPS)
+		{
+		    static unsigned int lastTick=0;
+		    static int frames=0;
+		    unsigned int nowTick = SDL_GetTicks();
+		    frames++;
+		    if(lastTick + 5000 <= nowTick)
+		    {
+		        printf("Video: %.3f VI/S\n", frames/5.0);
+
+		        frames = 0;
+		        lastTick = nowTick;
+		    }
+		}
+	
         OGL.screenUpdate=true;
         VI_UpdateScreen();
         OGL.mustRenderDlist = false;

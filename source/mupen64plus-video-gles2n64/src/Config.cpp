@@ -106,6 +106,7 @@ Option configOptions[] =
 
     {"#Other Settings:", NULL, 0},
     {"update mode", &config.updateMode, SCREEN_UPDATE_AT_VI_UPDATE },
+	{"print FPS", &config.printFPS, 0},
     {"ignore offscreen rendering", &config.ignoreOffscreenRendering, 0},
     {"force screen clear", &config.forceBufferClear, 0},
     {"flip vertical", &config.screen.flipVertical, 0},
