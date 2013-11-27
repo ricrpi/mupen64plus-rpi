@@ -394,14 +394,9 @@ int save_eventqueue_infos(char *buf)
 void load_eventqueue_infos(char *buf)
 {
     int len = 0;
-    //clear_queue();
-
-	if (qbase != NULL) free(qbase);
-	qbase = (interupt_queue *) malloc(sizeof(interupt_queue) * QUEUE_SIZE );
-	memset(qbase,0,sizeof(interupt_queue) * QUEUE_SIZE );
-	qstackindex=0;
-    
-	int i=0;
+    int i=0;
+	
+	clear_queue();
 
 	//load the stack with the addresses of available slots
 	for (i =0; i < QUEUE_SIZE; i++)
@@ -413,8 +408,21 @@ void load_eventqueue_infos(char *buf)
     {
         int type = *((unsigned int*)&buf[len]);
         unsigned int count = *((unsigned int*)&buf[len+4]);
-        add_interupt_event_count(type, count);
-        len += 8;
+        
+		switch (type)
+		{
+			#ifdef USE_COMPARE
+			case COMPARE_INT:	add_interupt_event_count(COMPARE_INT, count); break;
+			#endif
+			#ifdef USE_SPECIAL
+			case SPECIAL_INT:	add_interupt_event_count(SPECIAL_INT, count); break;
+			#endif
+			#ifdef USE_CHECK
+			case CHECK_INT:	add_interupt_event_count(CHECK_INT, count); break;
+			#endif
+			default: add_interupt_event_count(type, count);
+		}        
+		len += 8;
     }
 }
 
