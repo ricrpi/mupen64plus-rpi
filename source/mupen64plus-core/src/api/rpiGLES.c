@@ -18,7 +18,8 @@
 
 #include <SDL/SDL_keysym.h>
 
-#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+
+//#define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT(...)
@@ -110,7 +111,7 @@ static const int RAWtoSDL[] = {
 static const int X11toSDL[] = { 0,			1,			2,			3,			4,			5,			6,			7,
 								8,			SDLK_ESCAPE,			10,			11,			12,			13,			14,			15,
 								16,			17,			18,			19,			20,			21,			22,			23,
-								24,			25,			26,			27,28,			29,			30,			31,
+								24,			25,			26,			27,			28,			29,			30,			31,
 								32,			33,			34,			35,			36,			37,			38,			39,
 								40,			41,			42,			43,			44,			45,			46,			47,
 								48,			49,			50,			51,			52,			53,			54,			55,
@@ -252,7 +253,7 @@ void RPI_Pause(unsigned int bPause)
 	   	dummy_rect.height = 1;
 
 		dispman_update = vc_dispmanx_update_start( 0 /* Priority*/);
-	DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
+		DEBUG_PRINT("%d RPI Window at %d,%d %dx%d\n", __LINE__, dest_rect.x, dest_rect.y, dest_rect.width, dest_rect.height);
 
 		vc_dispmanx_element_change_attributes( dispman_update, dispman_element, 0, 
 			0, 255, &dummy_rect, &src_rect, DISPMANX_PROTECTION_NONE,(DISPMANX_TRANSFORM_T)0 );
@@ -652,24 +653,23 @@ int RPI_NextXEvent(XEvent* xEvent)
 	}
 	else  // remote ssh or X window broken
 	{
-		static unsigned char kstates[]= {0,0,0,0,0,0,0,0,0,0,0};
+		static unsigned char kstates[]= {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
 		int res;
 		int byteToRead = 0;
-		char buf[] = {0,0,0};
+		char buf[] = {0,0,0,0,0};
 		int i;		
 
 		xEvent->xkey.keycode = 0;
 
 		/* read scan code from stdin */
-		res = read(0, &buf[0], 1);
+		res = read(0, &buf[0], 5);
 		/* keep reading til there's no more*/
 		if (res > 0)
 		{
 			if (buf[0] == 27)
 			{
-				byteToRead = read(0,&buf[1],2);
-				if (byteToRead > 1)
+				if (res > 2)
 				{
 					switch (buf[2])
 					{
@@ -678,10 +678,22 @@ int RPI_NextXEvent(XEvent* xEvent)
 						case 'C': 	i=3; xEvent->xkey.keycode = SDLK_UP; 		break;
 						case 'D': 	i=4; xEvent->xkey.keycode = SDLK_DOWN; 		break;
 					}
+					if (buf[1] == 91 && buf[2] == 49 && buf[3] == 53) // F5 key (save state)
+					{
+						i=5; xEvent->xkey.keycode = SDLK_F5;
+					}
+					else if (buf[1] == 91 && buf[2] == 49 && buf[3] == 56) // F7 key (load state)
+					{
+						i=6; xEvent->xkey.keycode = SDLK_F7;
+					}
+					else if (buf[1] == 91 && buf[2] == 50 && buf[3] == 52) // F12 key (screen shot)
+					{
+						i=7; xEvent->xkey.keycode = SDLK_F12;
+					}
 				}
 				else if (byteToRead == 0)	//ESC key pressed
 				{
-				 	i = 5; 
+				 	i = 8; 
 					xEvent->xkey.keycode = SDLK_ESCAPE;
 				}
 			}
@@ -689,10 +701,10 @@ int RPI_NextXEvent(XEvent* xEvent)
 			{
 				switch (buf[0])
 				{
-					case 'q': 	i=5; xEvent->xkey.keycode = SDLK_ESCAPE; 		break;
-					case 'a': 	i=6; xEvent->xkey.keycode = SDLK_LSHIFT; 		break;	// B button
-					case 'z': 	i=7; xEvent->xkey.keycode = SDLK_LCTRL; 		break;	// A button
-					case '\n': 	i=8; xEvent->xkey.keycode = SDLK_RETURN; 		break;	// Start button
+					case 'q': 	i=9; xEvent->xkey.keycode = SDLK_ESCAPE; 		break;
+					case 'a': 	i=10; xEvent->xkey.keycode = SDLK_LSHIFT; 		break;	// B button
+					case 'z': 	i=11; xEvent->xkey.keycode = SDLK_LCTRL; 		break;	// A button
+					case '\n': 	i=12; xEvent->xkey.keycode = SDLK_RETURN; 		break;	// Start button
 				}
 			}			
 			if (i > 0)
@@ -702,7 +714,12 @@ int RPI_NextXEvent(XEvent* xEvent)
 				else xEvent->type = KeyRelease;
 			}
 
-			DEBUG_PRINT("<< %u %u %u, %c %c %c SDL key %d, pressed %d\n", buf[0], buf[1], buf[2], buf[0], buf[1], buf[2], xEvent->xkey.keycode, kstates[i]);
+			if (res == 1) DEBUG_PRINT("<< %3u                 | %c             | SDL key %d, pressed %d\n", buf[0], buf[0], xEvent->xkey.keycode, kstates[i]);
+			if (res == 2) DEBUG_PRINT("<< %3u %3u             | %c %c          | SDL key %d, pressed %d\n", buf[0], buf[1], buf[0], buf[1], xEvent->xkey.keycode, kstates[i]);
+			if (res == 3) DEBUG_PRINT("<< %3u %3u %3u         | %c %c %c       | SDL key %d, pressed %d\n", buf[0], buf[1], buf[2], buf[0], buf[1], buf[2], xEvent->xkey.keycode, kstates[i]);
+			if (res == 4) DEBUG_PRINT("<< %3u %3u %3u %3u     | %c %c %c %c    | SDL key %d, pressed %d\n", buf[0], buf[1], buf[2], buf[3], buf[0], buf[1], buf[2], buf[3], xEvent->xkey.keycode, kstates[i]);
+			if (res == 5) DEBUG_PRINT("<< %3u %3u %3u %3u %3u | %c %c %c %c %c | SDL key %d, pressed %d\n", buf[0], buf[1], buf[2], buf[3], buf[4], buf[0], buf[1], buf[2], buf[3], buf[4], xEvent->xkey.keycode, kstates[i]);
+
 			return 1;
 		}
 	}
