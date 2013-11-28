@@ -43,7 +43,6 @@ int get_next_event_type(void);
 int save_eventqueue_infos(char *buf);
 void load_eventqueue_infos(char *buf);
 
-/*
 #define VI_INT      0x001
 #define COMPARE_INT 0x002
 #define CHECK_INT   0x004
@@ -55,19 +54,4 @@ void load_eventqueue_infos(char *buf);
 #define DP_INT      0x100
 #define HW2_INT     0x200
 #define NMI_INT     0x400
-*/
-
-#define VI_INT      0x001
-#define COMPARE_INT 0x002
-#define CHECK_INT   0x003
-#define SI_INT      0x004
-#define PI_INT      0x005
-#define SPECIAL_INT 0x006
-#define AI_INT      0x007
-#define SP_INT      0x008
-#define DP_INT      0x009
-#define HW2_INT     0x00A
-#define NMI_INT     0x00B
-
-#define INT_COUNT	0x0C
 
