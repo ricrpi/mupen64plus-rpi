@@ -51,7 +51,7 @@
 
 #include <unistd.h>
 
-//#define DEBUG_PRINT(...) printf(__VA_ARGS__);sleep(1)
+//#define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
 
 #ifndef DEBUG_PRINT
@@ -60,7 +60,7 @@
 
 #define USE_SPECIAL
 //#define USE_COMPARE
-#define USE_CHECK
+//#define USE_CHECK
 //#define NEW_COUNT
 
 extern uint32_t SDL_GetTicks();
@@ -157,17 +157,26 @@ static int before_event(unsigned int evt1, unsigned int evt2, int type2)
 {
 #ifdef NEW_COUNT
 	// if evt1 is on next loop of Count, not this one then
-	if (evt1 < Count && Count < evt2)
+	if (evt1 > Count)
 	{
-		return (0);
+		if (evt2 > Count)
+		{
+			return (evt1 < evt2);
+		}else
+		{
+			if ((Count - evt2) < 0x10000000 && type2 == SPECIAL_INT && SPECIAL_done) return 1;
+			return 0;
+		}
 	} 
 	else
 	{
-		return (evt1 < evt2);
+		return 0;
 	}
 #else
+	//is evt1 after Count
     if(evt1 - Count < 0x80000000)
     {
+		//is evt2 after Count
         if(evt2 - Count < 0x80000000)
         {
             if(evt1 < evt2) return 1;
@@ -175,6 +184,7 @@ static int before_event(unsigned int evt1, unsigned int evt2, int type2)
         }
         else
         {
+			//if Count < evt2+0x10000000
             if((Count - evt2) < 0x10000000)
             {
 #ifdef USE_SPECIAL
@@ -201,7 +211,7 @@ static int before_event(unsigned int evt1, unsigned int evt2, int type2)
 void add_interupt_event(int type, unsigned int delay)
 {
 #ifdef NEW_COUNT
-	unsigned int count = (Count + delay) & 0x7FFFFFFF;
+	unsigned int count = ((Count + delay) & 0x0FFFFFFF);
 #else
     unsigned int count = Count + delay/**2*/;
 #endif
@@ -215,7 +225,7 @@ void add_interupt_event(int type, unsigned int delay)
 	if(Count > 0x80000000) SPECIAL_done = 0;
 #endif
 
-	DEBUG_PRINT("add_interupt_event(%d,%d)\n",type,delay);
+	DEBUG_PRINT("add_interupt_event() type %d, at %u, Count %u\n",type,count, Count);
 
     if (get_event(type)) {
         DebugMessage(M64MSG_WARNING, "two events of type 0x%x in interrupt queue", type);
@@ -289,7 +299,7 @@ void add_interupt_event_count(int type, unsigned int count)
 
 static void remove_interupt_event(void)
 {
-	DEBUG_PRINT("remove_interupt_event %d\n",q->type);
+	//DEBUG_PRINT("remove_interupt_event %d\n",q->type);
 
     interupt_queue *aux = q->next;
 #ifdef USE_SPECIAL
@@ -454,7 +464,7 @@ void init_interupt(void)
 
 void check_interupt(void)
 {
-	DEBUG_PRINT("check_interupt\n");
+	//DEBUG_PRINT("check_interupt\n");
 
     if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
         Cause = (Cause | 0x400) & 0xFFFFFF83;
@@ -564,7 +574,7 @@ void gen_interupt(void)
         generic_jump_to(dest);
         return;
     }
-	DEBUG_PRINT("gen_interupt() %d, Count = %d\n", q->type, Count);
+	//DEBUG_PRINT("gen_interupt() %d, Count = %d\n", q->type, Count);
     switch(q->type)
     {
         case SPECIAL_INT:
