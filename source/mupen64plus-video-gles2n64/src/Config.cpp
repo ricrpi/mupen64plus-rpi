@@ -79,7 +79,7 @@ Option configOptions[] =
     {"", NULL, 0},
 
     {"#Render Settings:", NULL, 0},
-    {"enable fog", &config.enableFog, 0},
+    {"enable fog", &config.enableFog, 1},
     {"enable primitive z", &config.enablePrimZ, 1},
     {"enable lighting", &config.enableLighting, 1},
     {"enable alpha test", &config.enableAlphaTest, 1},
@@ -98,7 +98,7 @@ Option configOptions[] =
     {"", NULL, 0},
 
     {"#Frame skip:", NULL, 0},
-    {"auto frameskip", &config.autoFrameSkip, 0},
+    {"auto frameskip", &config.autoFrameSkip, 1},
     {"target FPS", &config.targetFPS, 20},
     {"frame render rate", &config.frameRenderRate, 1},
     {"vertical sync", &config.verticalSync, 0},
@@ -107,7 +107,7 @@ Option configOptions[] =
     {"#Other Settings:", NULL, 0},
     {"update mode", &config.updateMode, SCREEN_UPDATE_AT_VI_UPDATE },
 	{"print FPS", &config.printFPS, 0},
-    {"ignore offscreen rendering", &config.ignoreOffscreenRendering, 0},
+    {"ignore offscreen rendering", &config.ignoreOffscreenRendering, 1},
     {"force screen clear", &config.forceBufferClear, 0},
     {"flip vertical", &config.screen.flipVertical, 0},
 // paulscode: removed from pre-compile to a config option

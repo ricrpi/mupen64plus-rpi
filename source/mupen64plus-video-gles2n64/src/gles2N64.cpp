@@ -57,12 +57,12 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle,
     ticksInitialize();
 
     //int max_frames = Android_JNI_GetMaxFrameSkip();
-	int max_frames = 1;
+	//int max_frames = 1;
 // TODO: get rid of this, it should be handled through the config file:
   //  if( Android_JNI_GetAutoFrameSkip() )
     //    frameSkipper.setSkips( FrameSkipper::AUTO, max_frames );
    // else
-        frameSkipper.setSkips( FrameSkipper::MANUAL, max_frames );
+        //frameSkipper.setSkips( FrameSkipper::MANUAL, max_frames );
 //
     return M64ERR_SUCCESS;
 }

@@ -141,14 +141,13 @@ void OGL_InitStates()
    
     char m_strDeviceStats[200];
     m64p_video_flags flags = M64VIDEOFLAG_SUPPORT_RESIZING;
-    if (CoreVideo_SetVideoMode(400, 240, 32, M64VIDEO_FULLSCREEN, flags) != M64ERR_SUCCESS)
+    if (CoreVideo_SetVideoMode(config.window.width, config.window.height, 32, M64VIDEO_FULLSCREEN, flags) != M64ERR_SUCCESS)
 	{
-		printf("ERROR: Failed to set %i-bit video mode: %ix%i\n", 32, 400, 240); //TODO
+		printf("ERROR: Failed to set %i-bit video mode: %ix%i\n", 32, config.window.width, config.window.height);
 		return;
 	}
 
 	const unsigned char* m_pRenderStr = glGetString(GL_RENDERER);
-    const unsigned char* m_pExtensionStr = glGetString(GL_EXTENSIONS);
     const unsigned char* m_pVersionStr = glGetString(GL_VERSION);
     const unsigned char* m_pVendorStr = glGetString(GL_VENDOR);
 
@@ -171,7 +170,7 @@ void OGL_InitStates()
     //// paulscode, added for different configurations based on hardware
     // (part of the missing shadows and stars bug fix)
     //int hardwareType = Android_JNI_GetHardwareType();
-    float f1, f2;
+    //float f1, f2;
     //Android_JNI_GetPolygonOffset(hardwareType, 1, &f1, &f2);
     //glPolygonOffset( f1, f2 );
     ////
@@ -1151,7 +1150,7 @@ void OGL_ClearDepthBuffer()
         OGL_SwapBuffers();
 
     //float depth = 1.0 - (gDP.fillColor.z / ((float)0x3FFF)); // broken on OMAP3
-    float depth = gDP.fillColor.z ;
+    //float depth = gDP.fillColor.z ;
 
 /////// paulscode, graphics bug-fixes
     glDisable( GL_SCISSOR_TEST );
@@ -1331,7 +1330,7 @@ void OGL_SwapBuffers()
     if (config.forceBufferClear)
     {
 /////// paulscode, graphics bug-fixes
-    float depth = gDP.fillColor.z ;
+   // float depth = gDP.fillColor.z ;
     glDisable( GL_SCISSOR_TEST );
     glDepthMask( GL_TRUE );  // fixes side-bar graphics glitches
 //    glClearDepthf( depth );  // broken on Qualcomm Adreno
