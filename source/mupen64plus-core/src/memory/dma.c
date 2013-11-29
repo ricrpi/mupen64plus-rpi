@@ -45,7 +45,7 @@
 #include "main/util.h"
 
 #define MODE 1 //0,1,2
-//#define PRINT_DMA_MSG(...) DebugMessage(__VA_ARGS__)
+#define PRINT_DMA_MSG(...) DebugMessage(__VA_ARGS__)
 
 
 #ifndef PRINT_DMA_MSG
@@ -116,7 +116,7 @@ void dma_pi_read(void)
         {
             sram_read_file();
 
-			PRINT_DMA_MSG(M64MSG_INFO, "DMA %d %d %x > %x", __LINE__, pi_register.pi_rd_len_reg & 0xFFFFFF, rdram, sram );
+			//PRINT_DMA_MSG(M64MSG_INFO, "DMA %d %d %x > %x", __LINE__, pi_register.pi_rd_len_reg & 0xFFFFFF, rdram, sram );
 
 #if MODE > 0
 			memcpy(&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], &rdram[pi_register.pi_dram_addr_reg], (pi_register.pi_rd_len_reg & 0xFFFFFF)+1);
@@ -161,7 +161,7 @@ void dma_pi_write(void)
             {
                 sram_read_file();
 
-				PRINT_DMA_MSG(M64MSG_INFO, "DMA %d %d %x > %x", __LINE__, pi_register.pi_wr_len_reg & 0xFFFFFF, sram, rdram );
+				//PRINT_DMA_MSG(M64MSG_INFO, "DMA %d %d %x > %x", __LINE__, pi_register.pi_wr_len_reg & 0xFFFFFF, sram, rdram );
 #if MODE > 0
 				memcpy(&rdram[pi_register.pi_dram_addr_reg], &sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], (pi_register.pi_wr_len_reg & 0xFFFFFF)+1);
 #else
@@ -225,10 +225,10 @@ void dma_pi_write(void)
 		unsigned long rdram_address1 = pi_register.pi_dram_addr_reg+i+0x80000000;
         unsigned long rdram_address2 = pi_register.pi_dram_addr_reg+i+0xa0000000;
 
-		PRINT_DMA_MSG(M64MSG_INFO, "dma.c:%d %X %X, longueur = %d", __LINE__, ((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur );
+		//PRINT_DMA_MSG(M64MSG_INFO, "dma.c:%d 0x%08X 0x%08X, longueur = %d", __LINE__, &((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], &rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur );
         
-#if 0
-		memcpy(&rdram[pi_register.pi_dram_addr_reg], &rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur);
+#if 1
+		memcpy(&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], &rom[((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)], longueur);
 		
 		if (!invalid_code[rdram_address1>>12])
         {
@@ -283,8 +283,9 @@ void dma_pi_write(void)
     else
     {
 
-#if MODE > 0 && 0
-		memcpy(&rdram[pi_register.pi_dram_addr_reg], &rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur);
+#if MODE > 0 && 1
+		//PRINT_DMA_MSG(M64MSG_INFO, "dma.c:%d %X %X, longueur = %d", __LINE__, ((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur );
+		memcpy(&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], &rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur);
 #else
 		for (i=0; i<(int)longueur; i++)
         {
@@ -351,7 +352,7 @@ void dma_sp_write(void)
     unsigned char *spmem = ((sp_register.sp_mem_addr_reg & 0x1000) != 0) ? (unsigned char*)SP_IMEM : (unsigned char*)SP_DMEM;
     unsigned char *dram = (unsigned char*)rdram;
 
-	PRINT_DMA_MSG(M64MSG_INFO, "DMA:%d, %x << %x, len=%d, count=%d, skip=%d", __LINE__, &spmem[memaddr], &dram[dramaddr], length, count, skip);
+	//PRINT_DMA_MSG(M64MSG_INFO, "DMA:%d, %x << %x, len=%d, count=%d, skip=%d", __LINE__, &spmem[memaddr], &dram[dramaddr], length, count, skip);
 
 #if !defined(NO_ASM) && defined(ARM) && MODE > 1
 	dma_copy(&spmem[memaddr], &dram[dramaddr], length, count, skip);
@@ -392,7 +393,7 @@ void dma_sp_read(void)
     unsigned char *spmem = ((sp_register.sp_mem_addr_reg & 0x1000) != 0) ? (unsigned char*)SP_IMEM : (unsigned char*)SP_DMEM;
     unsigned char *dram = (unsigned char*)rdram;
 
-	PRINT_DMA_MSG(M64MSG_INFO, "DMA:%d, %x << %x, len=%d, count=%d, skip=%d", __LINE__, &spmem[memaddr], &dram[dramaddr], length, count, skip);
+	//PRINT_DMA_MSG(M64MSG_INFO, "DMA:%d, %x << %x, len=%d, count=%d, skip=%d", __LINE__, &spmem[memaddr], &dram[dramaddr], length, count, skip);
 
 #if !defined(NO_ASM) && defined(ARM) && MODE > 1
 	dma_copy(&dram[dramaddr],  &spmem[memaddr], length, count, skip);

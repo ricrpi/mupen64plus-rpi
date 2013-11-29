@@ -338,6 +338,7 @@ BOOL InitConfiguration(void)
     ConfigSetDefaultBool(l_ConfigVideoRice, "EnableSSE", FALSE, "Enable/Disable SSE optimizations for capable CPUs");
     ConfigSetDefaultBool(l_ConfigVideoRice, "EnableVertexShader", TRUE, "Use GPU vertex shader");
     ConfigSetDefaultBool(l_ConfigVideoRice, "SkipFrame", TRUE, "If this option is enabled, the plugin will skip every other frame");
+    ConfigSetDefaultBool(l_ConfigVideoRice, "SkipScreenUpdate", TRUE, "If this option is enabled, the plugin will only draw every other screen update");
     ConfigSetDefaultBool(l_ConfigVideoRice, "TexRectOnly", FALSE, "If enabled, texture enhancement will be done only for TxtRect ucode");
     ConfigSetDefaultBool(l_ConfigVideoRice, "SmallTextureOnly", FALSE, "If enabled, texture enhancement will be done only for textures width+height<=128");
     ConfigSetDefaultBool(l_ConfigVideoRice, "LoadHiResCRCOnly", TRUE, "Select hi-resolution textures based only on the CRC and ignore format+size information (Glide64 compatibility)");
@@ -457,6 +458,7 @@ static void ReadConfiguration(void)
     options.bEnableSSE = ConfigGetParamBool(l_ConfigVideoRice, "EnableSSE");
     options.bEnableVertexShader = ConfigGetParamBool(l_ConfigVideoRice, "EnableVertexShader");
     options.bSkipFrame = ConfigGetParamBool(l_ConfigVideoRice, "SkipFrame");
+	options.bSkipUpdate = ConfigGetParamBool(l_ConfigVideoRice, "SkipScreenUpdate");
     options.bTexRectOnly = ConfigGetParamBool(l_ConfigVideoRice, "TexRectOnly");
     options.bSmallTextureOnly = ConfigGetParamBool(l_ConfigVideoRice, "SmallTextureOnly");
     options.bLoadHiResTextures = ConfigGetParamBool(l_ConfigVideoRice, "LoadHiResTextures");

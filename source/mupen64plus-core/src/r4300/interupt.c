@@ -51,12 +51,17 @@
 
 #include <unistd.h>
 
-//#define DEBUG_PRINT(...) printf(__VA_ARGS__);sleep(1)
+//#define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
 
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT(...)
 #endif
+
+#define USE_SPECIAL
+//#define USE_COMPARE
+//#define USE_CHECK
+//#define NEW_COUNT
 
 extern uint32_t SDL_GetTicks();
 
@@ -94,8 +99,8 @@ static interupt_queue* queue_malloc(size_t Bytes)
 			DebugMessage(M64MSG_VERBOSE, "/mupen64plus-core/src/4300/interupt.c: QUEUE_SIZE too small");
 			bNotified = 1;
 		}
-		
- 		return malloc(Bytes);	
+
+ 		return malloc(Bytes);
 	}
 	interupt_queue* newQueue = qstack[qstackindex];
 	qstackindex ++;
@@ -144,12 +149,34 @@ static void clear_queue(void)
     }
 }*/
 
+#ifdef USE_SPECIAL
 static int SPECIAL_done = 0;
+#endif
 
 static int before_event(unsigned int evt1, unsigned int evt2, int type2)
 {
+#ifdef NEW_COUNT
+	// if evt1 is on next loop of Count, not this one then
+	if (evt1 > Count)
+	{
+		if (evt2 > Count)
+		{
+			return (evt1 < evt2);
+		}else
+		{
+			if ((Count - evt2) < 0x10000000 && type2 == SPECIAL_INT && SPECIAL_done) return 1;
+			return 0;
+		}
+	} 
+	else
+	{
+		return 0;
+	}
+#else
+	//is evt1 after Count
     if(evt1 - Count < 0x80000000)
     {
+		//is evt2 after Count
         if(evt2 - Count < 0x80000000)
         {
             if(evt1 < evt2) return 1;
@@ -157,9 +184,11 @@ static int before_event(unsigned int evt1, unsigned int evt2, int type2)
         }
         else
         {
+			//if Count < evt2+0x10000000
             if((Count - evt2) < 0x10000000)
             {
-                switch(type2)
+#ifdef USE_SPECIAL
+ 				switch(type2)
                 {
                     case SPECIAL_INT:
                         if(SPECIAL_done) return 1;
@@ -168,24 +197,35 @@ static int before_event(unsigned int evt1, unsigned int evt2, int type2)
                     default:
                         return 0;
                 }
+#else
+			return 0;
+#endif
             }
             else return 1;
         }
     }
     else return 0;
+#endif
 }
 
 void add_interupt_event(int type, unsigned int delay)
 {
+#ifdef NEW_COUNT
+	unsigned int count = ((Count + delay) & 0x0FFFFFFF);
+#else
     unsigned int count = Count + delay/**2*/;
+#endif
+#ifdef USE_SPECIAL
     int special = 0;
+#endif
     interupt_queue *aux = q;
-   
-    if(type == SPECIAL_INT /*|| type == COMPARE_INT*/) special = 1;
-    if(Count > 0x80000000) SPECIAL_done = 0;
-   
 
-	DEBUG_PRINT("add_interupt_event(%d,%d)\n",type,delay);
+#ifdef USE_SPECIAL
+    if(type == SPECIAL_INT /*|| type == COMPARE_INT*/) special = 1;
+	if(Count > 0x80000000) SPECIAL_done = 0;
+#endif
+
+	DEBUG_PRINT("add_interupt_event() type %d, at %u, Count %u\n",type,count, Count);
 
     if (get_event(type)) {
         DebugMessage(M64MSG_WARNING, "two events of type 0x%x in interrupt queue", type);
@@ -202,7 +242,11 @@ void add_interupt_event(int type, unsigned int delay)
         return;
     }
    
+#ifdef USE_SPECIAL
     if(before_event(count, q->count, q->type) && !special)
+#else
+	if(before_event(count, q->count, q->type))
+#endif
     {
         q = (interupt_queue *) queue_malloc(sizeof(interupt_queue));
         q->next = aux;
@@ -214,9 +258,15 @@ void add_interupt_event(int type, unsigned int delay)
     }
    
 //if not at end of list and (count is after next item of type or special) then get next
+#ifdef USE_SPECIAL
     while (aux->next != NULL && (!before_event(count, aux->next->count, aux->next->type) || special))
-        aux = aux->next;
-   
+#else
+    while (aux->next != NULL && (!before_event(count, aux->next->count, aux->next->type)))
+#endif
+    {
+		aux = aux->next;
+	}   
+
     if (aux->next == NULL)
     {
         aux->next = (interupt_queue *) queue_malloc(sizeof(interupt_queue));
@@ -228,7 +278,9 @@ void add_interupt_event(int type, unsigned int delay)
     else
     {
         interupt_queue *aux2;
+#ifdef USE_SPECIAL
         if (type != SPECIAL_INT)
+#endif
             while(aux->next != NULL && aux->next->count == count)
                 aux = aux->next;
         aux2 = aux->next;
@@ -247,13 +299,20 @@ void add_interupt_event_count(int type, unsigned int count)
 
 static void remove_interupt_event(void)
 {
-	DEBUG_PRINT("remove_interupt_event %d\n",q->type);
+	//DEBUG_PRINT("remove_interupt_event %d\n",q->type);
 
     interupt_queue *aux = q->next;
+#ifdef USE_SPECIAL
     if(q->type == SPECIAL_INT) SPECIAL_done = 1;
+#endif
     queue_free(q);
     q = aux;
+
+#ifdef NEW_COUNT
+	if (q != NULL)
+#else
     if (q != NULL && (q->count > Count || (Count - q->count) < 0x80000000))
+#endif
         next_interupt = q->count;
     else
         next_interupt = 0;
@@ -307,11 +366,19 @@ void translate_event_queue(unsigned int base)
     aux=q;
     while (aux != NULL)
     {
+#ifdef NEW_COUNT
+		aux->count = ((aux->count - Count)+base)& 0x7FFFFFFF;
+#else
         aux->count = (aux->count - Count)+base;
+#endif
         aux = aux->next;
     }
+#ifdef USE_COMPARE
     add_interupt_event_count(COMPARE_INT, Compare);
+#endif
+#ifdef USE_SPECIAL
     add_interupt_event_count(SPECIAL_INT, 0);
+#endif
 }
 
 int save_eventqueue_infos(char *buf)
@@ -337,14 +404,9 @@ int save_eventqueue_infos(char *buf)
 void load_eventqueue_infos(char *buf)
 {
     int len = 0;
-    //clear_queue();
-
-	if (qbase != NULL) free(qbase);
-	qbase = (interupt_queue *) malloc(sizeof(interupt_queue) * QUEUE_SIZE );
-	memset(qbase,0,sizeof(interupt_queue) * QUEUE_SIZE );
-	qstackindex=0;
-    
-	int i=0;
+    int i=0;
+	
+	clear_queue();
 
 	//load the stack with the addresses of available slots
 	for (i =0; i < QUEUE_SIZE; i++)
@@ -356,8 +418,21 @@ void load_eventqueue_infos(char *buf)
     {
         int type = *((unsigned int*)&buf[len]);
         unsigned int count = *((unsigned int*)&buf[len+4]);
-        add_interupt_event_count(type, count);
-        len += 8;
+        
+		switch (type)
+		{
+			#ifdef USE_COMPARE
+			case COMPARE_INT:	add_interupt_event_count(COMPARE_INT, count); break;
+			#endif
+			#ifdef USE_SPECIAL
+			case SPECIAL_INT:	add_interupt_event_count(SPECIAL_INT, count); break;
+			#endif
+			#ifdef USE_CHECK
+			case CHECK_INT:	add_interupt_event_count(CHECK_INT, count); break;
+			#endif
+			default: add_interupt_event_count(type, count);
+		}        
+		len += 8;
     }
 }
 
@@ -374,25 +449,30 @@ void init_interupt(void)
 	{
 		qstack[i] = &qbase[i];
 	}
-
+#ifdef USE_SPECIAL
 	SPECIAL_done = 1;
+#endif
     next_vi = next_interupt = 5000;
     vi_register.vi_delay = next_vi;
     vi_field = 0;
     //clear_queue();
     add_interupt_event_count(VI_INT, next_vi);
+#ifdef USE_SPECIAL
     add_interupt_event_count(SPECIAL_INT, 0);
+#endif
 }
 
 void check_interupt(void)
 {
-	DEBUG_PRINT("check_interupt\n");
+	//DEBUG_PRINT("check_interupt\n");
 
     if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
         Cause = (Cause | 0x400) & 0xFFFFFF83;
     else
         Cause &= ~0x400;
     if ((Status & 7) != 1) return;
+
+#ifdef USE_CHECK
     if (Status & Cause & 0xFF00)
     {
         if(q == NULL)
@@ -412,6 +492,7 @@ void check_interupt(void)
         }
         next_interupt = Count;
     }
+#endif
 }
 
 void X11_PumpEvents()
@@ -480,23 +561,28 @@ void gen_interupt(void)
     {
         unsigned int dest = skip_jump;
         skip_jump = 0;
-
-        if (q->count > Count || (Count - q->count) < 0x80000000)
-            next_interupt = q->count;
+#ifdef NEW_COUNT
+		next_interupt = q->count;
+#else
+		if (q->count > Count || (Count - q->count) < 0x80000000)
+			next_interupt = q->count;
         else
             next_interupt = 0;
+#endif  
 
         last_addr = dest;
         generic_jump_to(dest);
         return;
     }
-	DEBUG_PRINT("gen_interupt() %d, Count = %d\n", q->type, Count);
+	//DEBUG_PRINT("gen_interupt() %d, Count = %d\n", q->type, Count);
     switch(q->type)
     {
         case SPECIAL_INT:
             if (Count > 0x10000000) return;
             remove_interupt_event();
+#ifdef USE_SPECIAL
             add_interupt_event_count(SPECIAL_INT, 0);
+#endif
             return;
             break;
         case VI_INT:
@@ -563,10 +649,12 @@ X11_PumpEvents();
 
         case COMPARE_INT:
             remove_interupt_event();
-            Count+=2;
+            
+#ifdef USE_COMPARE
+			Count+=2;
             add_interupt_event_count(COMPARE_INT, Compare);
-            Count-=2;
-
+			Count-=2;
+#endif       
             Cause = (Cause | 0x8000) & 0xFFFFFF83;
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
@@ -604,7 +692,7 @@ X11_PumpEvents();
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
             break;
-    
+
         case AI_INT:
             if (ai_register.ai_status & 0x80000000) // full
             {
@@ -614,7 +702,8 @@ X11_PumpEvents();
                 ai_register.current_delay = ai_register.next_delay;
                 ai_register.current_len = ai_register.next_len;
                 add_interupt_event_count(AI_INT, ai_event+ai_register.next_delay);
-         
+
+		DebugMessage(M64MSG_VERBOSE, "AI_INT");
                 MI_register.mi_intr_reg |= 0x04;
                 if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
                     Cause = (Cause | 0x400) & 0xFFFFFF83;

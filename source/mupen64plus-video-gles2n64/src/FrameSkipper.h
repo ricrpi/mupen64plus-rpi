@@ -1,7 +1,5 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- *   Mupen64plus - interupt.h                                              *
- *   Mupen64Plus homepage: http://code.google.com/p/mupen64plus/           *
- *   Copyright (C) 2002 Hacktarux                                          *
+ *   Copyright (C) 2011 yongzh (freeman.yong@gmail.com)                    *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -19,39 +17,39 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.          *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-void compare_interupt(void);
-void gen_dp(void);
-void init_interupt(void);
+#ifndef FRAME_SKIPPER_H
+#define FRAME_SKIPPER_H
 
-extern int vi_field;
-extern unsigned int next_vi;
+class FrameSkipper {
+public:
+	enum { AUTO, MANUAL };
 
-// set to avoid savestates/reset if state may be inconsistent
-// (e.g. in the middle of an instruction)
-extern int interupt_unsafe_state;
+	FrameSkipper();
 
-void gen_interupt(void);
-void check_interupt(void);
+	void setSkips(int type, int max) {
+		skipType = type;
+		maxSkips = max;
+	}
 
-void translate_event_queue(unsigned int base);
-void remove_event(int type);
-void add_interupt_event_count(int type, unsigned int count);
-void add_interupt_event(int type, unsigned int delay);
-unsigned int get_event(int type);
-int get_next_event_type(void);
+	void setTargetFPS(int fps) {
+		targetFPS = fps;
+	}
 
-int save_eventqueue_infos(char *buf);
-void load_eventqueue_infos(char *buf);
+	bool willSkipNext() {
+		return (skipCounter > 0);
+	}
 
-#define VI_INT      0x001
-#define COMPARE_INT 0x002
-#define CHECK_INT   0x004
-#define SI_INT      0x008
-#define PI_INT      0x010
-#define SPECIAL_INT 0x020
-#define AI_INT      0x040
-#define SP_INT      0x080
-#define DP_INT      0x100
-#define HW2_INT     0x200
-#define NMI_INT     0x400
+	void start();
+	void update();
+
+private:
+	int skipType;
+	int maxSkips;
+	int targetFPS;
+	int skipCounter;
+	unsigned int initialTicks;
+	unsigned int virtualCount;
+};
+
+#endif
 

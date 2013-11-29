@@ -27,7 +27,7 @@ if [ -z "$MAKE" ]; then
 	MAKE=make
 fi
 if [ -z "$M64P_COMPONENTS" ]; then
-	M64P_COMPONENTS="core rom ui-console audio-sdl input-sdl rsp-hle video-gles2rice "
+	M64P_COMPONENTS="core rom ui-console audio-sdl input-sdl rsp-hle video-gles2rice video-gles2n64"
 fi
 
 mkdir -p ./test/

@@ -257,7 +257,8 @@ EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType, int *Plugi
 static void
 doSdlKeys(unsigned char* keystate)
 {
-    int c, b, axis_val, axis_max_val;
+    int c, b; 
+	char axis_val = 0, axis_max_val;
     static int grabmouse = 1, grabtoggled = 0;
 
     axis_max_val = 80;
@@ -272,25 +273,36 @@ doSdlKeys(unsigned char* keystate)
         {
             if( controller[c].button[b].key == SDL_SCANCODE_UNKNOWN || ((int) controller[c].button[b].key) < 0)
                 continue;
-            if( keystate[controller[c].button[b].key] )
-                controller[c].buttons.Value |= button_bits[b];
+            if( keystate[controller[c].button[b].key] ){
+#ifdef _DEBUG
+            	DebugMessage(M64MSG_INFO, "Controller %d got button %d",c, b);
+#endif
+				controller[c].buttons.Value |= button_bits[b];
+			}
         }
         for( b = 0; b < 2; b++ )
         {
             // from the N64 func ref: The 3D Stick data is of type signed char and in
             // the range between 80 and -80. (32768 / 409 = ~80.1)
-            if( b == 0 )
+           /* if( b == 0 )
                 axis_val = controller[c].buttons.X_AXIS;
             else
                 axis_val = -controller[c].buttons.Y_AXIS;
+*/
+			axis_val = 0;
 
             if( controller[c].axis[b].key_a != SDL_SCANCODE_UNKNOWN && ((int) controller[c].axis[b].key_a) > 0)
                 if( keystate[controller[c].axis[b].key_a] )
-                    axis_val = -axis_max_val;
-            if( controller[c].axis[b].key_b != SDL_SCANCODE_UNKNOWN && ((int) controller[c].axis[b].key_b) > 0)
+				{
+                	axis_val = -axis_max_val;
+					printf("%d key_a pressed %d\n", __LINE__, axis_val);
+				}
+           if( controller[c].axis[b].key_b != SDL_SCANCODE_UNKNOWN && ((int) controller[c].axis[b].key_b) > 0)
                 if( keystate[controller[c].axis[b].key_b] )
+				{
                     axis_val = axis_max_val;
-
+					printf("%d key_b pressed %d\n", __LINE__, axis_val);
+				}
             if( b == 0 )
                 controller[c].buttons.X_AXIS = axis_val;
             else
@@ -318,19 +330,19 @@ doSdlKeys(unsigned char* keystate)
     }
 }
 
-static unsigned char DataCRC( unsigned char *Data, int iLenght )
+static unsigned char DataCRC( unsigned char *Data, int iLength )
 {
     unsigned char Remainder = Data[0];
-
+	unsigned char Remainder2 = 0; 
     int iByte = 1;
     unsigned char bBit = 0;
 
-    while( iByte <= iLenght )
+    while( iByte <= iLength )
     {
         int HighBit = ((Remainder & 0x80) != 0);
         Remainder = Remainder << 1;
 
-        Remainder += ( iByte < iLenght && Data[iByte] & (0x80 >> bBit )) ? 1 : 0;
+        Remainder += ( iByte < iLength && Data[iByte] & (0x80 >> bBit )) ? 1 : 0;
 
         Remainder ^= (HighBit) ? 0x85 : 0;
 
@@ -338,7 +350,18 @@ static unsigned char DataCRC( unsigned char *Data, int iLenght )
         iByte += bBit/8;
         bBit %= 8;
     }
+/*
+	iByte = 0;
 
+	while (iByte < iLength)
+	{
+		Remainder2 ^= Data[iByte];
+		Remainder2 = Remainder << 2;
+	}
+
+
+	DebugMessage(M64MSG_INFO, "DataCRC called. Remainder = %d %d", Remainder, Remainder2);
+*/
     return Remainder;
 }
 
@@ -460,12 +483,13 @@ EXPORT void CALL GetKeys( int Control, BUTTONS *Keys )
 {
     static int mousex_residual = 0;
     static int mousey_residual = 0;
+
     int b, axis_val;
     SDL_Event event;
     unsigned char mstate;
 
     // Handle keyboard input first
-    doSdlKeys(SDL_GetKeyboardState(NULL));
+    //doSdlKeys(SDL_GetKeyboardState(NULL));
     doSdlKeys(myKeyState);
 
     // read joystick state
@@ -612,7 +636,7 @@ EXPORT void CALL GetKeys( int Control, BUTTONS *Keys )
     }
 
 #ifdef _DEBUG
-    DebugMessage(M64MSG_VERBOSE, "Controller #%d value: 0x%8.8X", Control, *(int *)&controller[Control].buttons );
+    DebugMessage(M64MSG_INFO, "Controller #%d axis %d,%d buttons: 0x%04X", Control, *((char *)&controller[Control].buttons + 2), *((char *)&controller[Control].buttons + 3), *(unsigned short*)&controller[Control].buttons );
 #endif
     *Keys = controller[Control].buttons;
 
