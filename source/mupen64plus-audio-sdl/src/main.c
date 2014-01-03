@@ -31,6 +31,9 @@
 #include "ilclient.h"
 #include "interface/vmcs_host/vc_tvservice.h"
 
+#include "interface/vmcs_host/vcilcs.h"
+#include "interface/vmcs_host/vchost.h"
+#include "interface/vmcs_host/vcilcs_common.h"
 
 #define M64P_PLUGIN_PROTOTYPES 1
 #include "m64p_types.h"
@@ -62,7 +65,7 @@ extern uint32_t SDL_GetTicks(void);
 	MODE 2 is to use 11025, 22050, 44100 if <= ROM frequency
 	MODE 3 is to use 11025, 22050, 44100 if > ROM frequency
 	MODE N is the frequency to use for sound output
-*/
+ */
 #define DEFAULT_MODE 1
 
 /* Default audio output on HDMI (1) or analogue port (0) */
@@ -72,8 +75,7 @@ extern uint32_t SDL_GetTicks(void);
 #define DEFAULT_LATENCY 100
 
 /* Number of buffers used by Audio*/
-#define DEFAULT_NUM_BUFFERS 100
-
+#define DEFAULT_NUM_BUFFERS 10
 
 #define SAMPLE_SIZE_BITS 	16
 #define NUM_CHANNELS		2
@@ -81,18 +83,25 @@ extern uint32_t SDL_GetTicks(void);
 #define CTTW_SLEEP_TIME 10
 #define MIN_LATENCY_TIME 10
 
+//#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+
+#ifndef DEBUG_PRINT
+#define DEBUG_PRINT(...)
+#endif
+
+
 #define OUT_CHANNELS(num_channels) ((num_channels) > 4 ? 8: (num_channels) > 2 ? 4: (num_channels))
 
 static const char *audio_dest[] = {"local", "hdmi"};
 
 typedef struct {
-   sem_t sema;
-   ILCLIENT_T *client;
-   COMPONENT_T *audio_render;
-   COMPONENT_T *list[2];
-   OMX_BUFFERHEADERTYPE *user_buffer_list; // buffers owned by the client
-   uint32_t num_buffers;
-   uint32_t bytes_per_sample;
+	sem_t sema;
+	ILCLIENT_T *client;
+	COMPONENT_T *audio_render;
+	COMPONENT_T *list[2];
+	OMX_BUFFERHEADERTYPE *user_buffer_list; // buffers owned by the client
+	uint32_t num_buffers;
+	uint32_t bytes_per_sample;
 } AUDIOPLAY_STATE_T;
 
 
@@ -134,6 +143,8 @@ static unsigned int uiLatency = DEFAULT_LATENCY;
 
 static unsigned int uiNumBuffers = DEFAULT_NUM_BUFFERS;
 
+static unsigned int uiUnderrunMode = 0;
+
 // volume to scale the audio by, range of 0..100
 // if muted, this holds the volume when not muted
 static unsigned int VolPercent = 80;
@@ -152,6 +163,9 @@ static void InitializeAudio(int freq);
 static void ReadConfig(void);
 
 static unsigned int critical_failure = 0;
+
+static void** pBuffer = NULL;
+static uint32_t uiBufferIndex = 0;
 
 /* definitions of pointers to Core config functions */
 ptr_ConfigOpenSection      ConfigOpenSection 	= NULL;
@@ -279,12 +293,14 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle, void *Con
 	ConfigSetDefaultInt(l_ConfigAudio, 	"DEFAULT_FREQUENCY",    DEFAULT_FREQUENCY,     		"Frequency which is used if rom doesn't want to change it");
 	ConfigSetDefaultBool(l_ConfigAudio, "SWAP_CHANNELS",        0,                     		"Swaps left and right channels");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"SECONDARY_BUFFER_SIZE",SECONDARY_BUFFER_SIZE, 		"Number of output samples per Audio callback. This is SDL's hardware buffer.");
-    ConfigSetDefaultInt(l_ConfigAudio, 	"OUTPUT_PORT",   		OUTPUT_PORT,   				"Audio output to go to (0) Analogue jack, (1) HDMI");
+	ConfigSetDefaultInt(l_ConfigAudio, 	"OUTPUT_PORT",   		OUTPUT_PORT,   				"Audio output to go to (0) Analogue jack, (1) HDMI");
 	ConfigSetDefaultInt(l_ConfigAudio, "DEFAULT_MODE",     	    DEFAULT_MODE,          "Audio Output Frequncy mode: 0 = Rom Frequency, 1 ROM Frequency if supported (HDMI only), 2 = Standard frequency < Rom Frequency, 3 = Standard frequency > Rom Frequency, [N] Force output frequency");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"LATENCY",      		DEFAULT_LATENCY,           	"Desired Latency in ms");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"VOLUME_ADJUST",        5,                     		"Percentage change each time the volume is increased or decreased");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"VOLUME_DEFAULT",       80,                    		"Default volume when a game is started");
-	ConfigSetDefaultInt(l_ConfigAudio,	"DEFAULT_NUM_BUFFERS",	DEFAULT_NUM_BUFFERS,		"The number of Audio buffers to use");
+	//ConfigSetDefaultInt(l_ConfigAudio,	"DEFAULT_NUM_BUFFERS",	DEFAULT_NUM_BUFFERS,		"The number of Audio buffers to use");
+	ConfigSetDefaultInt(l_ConfigAudio,	"UNDERRUN_MODE",		uiUnderrunMode,				"Underrun Mode, 0 = Nothing, 1 = scale frequency, 2 = repeat block" );
+
 	if (bSaveConfig && ConfigAPIVersion >= 0x020100)
 		ConfigSaveSection("Audio-RPI");
 
@@ -352,267 +368,282 @@ EXPORT void CALL AiDacrateChanged( int SystemType )
 
 //=================== Raspberry PI Native Audio functions ==============================
 
+
+void * audio_malloc(void *userdata, VCOS_UNSIGNED size, VCOS_UNSIGNED align, const char *description)
+{
+	//ilclient_malloc(private, portdef.nBufferSize, portdef.nBufferAlignment, comp->bufname);
+	void * ret = pBuffer[uiBufferIndex];
+	
+	uiBufferIndex ++;
+	if ( uiBufferIndex >= (uiNumBuffers)) uiBufferIndex = 0;
+	return ret;
+}
+
+void audio_free(void *userdata, void *pointer)
+{
+}
+
 static void input_buffer_callback(void *data, COMPONENT_T *comp)
 {
-   // do nothing - could add a callback to the user
-   // to indicate more buffers may be available.
+	// do nothing - could add a callback to the user
+	// to indicate more buffers may be available.
 }
 
 static int32_t audioplay_create(AUDIOPLAY_STATE_T **handle,
-                         uint32_t num_channels,
-                         uint32_t bit_depth,
-                         uint32_t num_buffers,
-                         uint32_t buffer_size)
+		uint32_t num_channels,
+		uint32_t bit_depth,
+		uint32_t num_buffers,
+		uint32_t buffer_size)
 {
-   uint32_t bytes_per_sample = (bit_depth * OUT_CHANNELS(num_channels)) >> 3;
-   int32_t ret = -1;
+	uint32_t bytes_per_sample = (bit_depth * OUT_CHANNELS(num_channels)) >> 3;
+	int32_t ret = -1;
 
-   *handle = NULL;
+	*handle = NULL;
 
-   // basic sanity check on arguments
-   if((num_channels >= 1 && num_channels <= 8) &&
-      (bit_depth == 16 || bit_depth == 32) &&
-      num_buffers > 0 &&
-      buffer_size >= bytes_per_sample)
-   {
-      // buffer lengths must be 16 byte aligned for VCHI
-      int size = (buffer_size + 15) & ~15;
-      AUDIOPLAY_STATE_T *st;
+	// basic sanity check on arguments
+	if((num_channels >= 1 && num_channels <= 8) &&
+			(bit_depth == 16 || bit_depth == 32) &&
+			num_buffers > 0 &&
+			buffer_size >= bytes_per_sample)
+	{
+		// buffer lengths must be 16 byte aligned for VCHI
+		int size = (buffer_size + 15) & ~15;
+		AUDIOPLAY_STATE_T *st;
 
-      // buffer offsets must also be 16 byte aligned for VCHI
-      st = calloc(1, sizeof(AUDIOPLAY_STATE_T));
+		// buffer offsets must also be 16 byte aligned for VCHI
+		st = calloc(1, sizeof(AUDIOPLAY_STATE_T));
 
-      if(st)
-      {
-         OMX_ERRORTYPE error;
-         OMX_PARAM_PORTDEFINITIONTYPE param;
-         OMX_AUDIO_PARAM_PCMMODETYPE pcm;
-         int32_t s;
-
-         ret = 0;
-         *handle = st;
-
-         // create and start up everything
-         s = sem_init(&st->sema, 0, 1);
-         if(s != 0) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
-
-         st->bytes_per_sample = bytes_per_sample;
-         st->num_buffers = num_buffers;
-
-         st->client = ilclient_init();
-         if(st->client == NULL) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
-
-         ilclient_set_empty_buffer_done_callback(st->client, input_buffer_callback, st);
-
-         error = OMX_Init();
-         if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
-
-         ilclient_create_component(st->client, &st->audio_render, "audio_render", ILCLIENT_ENABLE_INPUT_BUFFERS | ILCLIENT_DISABLE_ALL_PORTS);
-         if(st->audio_render == NULL) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
-
-         st->list[0] = st->audio_render;
-
-         // set up the number/size of buffers
-         memset(&param, 0, sizeof(OMX_PARAM_PORTDEFINITIONTYPE));
-         param.nSize = sizeof(OMX_PARAM_PORTDEFINITIONTYPE);
-         param.nVersion.nVersion = OMX_VERSION;
-         param.nPortIndex = 100;
-
-         error = OMX_GetParameter(ILC_GET_HANDLE(st->audio_render), OMX_IndexParamPortDefinition, &param);
-         if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
-
-         param.nBufferSize = size;
-         param.nBufferCountActual = num_buffers;
-
-         error = OMX_SetParameter(ILC_GET_HANDLE(st->audio_render), OMX_IndexParamPortDefinition, &param);
-         if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
-
-         // set the pcm parameters
-         memset(&pcm, 0, sizeof(OMX_AUDIO_PARAM_PCMMODETYPE));
-         pcm.nSize = sizeof(OMX_AUDIO_PARAM_PCMMODETYPE);
-         pcm.nVersion.nVersion = OMX_VERSION;
-         pcm.nPortIndex = 100;
-         pcm.nChannels = OUT_CHANNELS(num_channels);
-         pcm.eNumData = OMX_NumericalDataSigned;
-         pcm.eEndian = OMX_EndianLittle;
-         pcm.nSamplingRate = OutputFreq;
-         pcm.bInterleaved = OMX_TRUE;
-         pcm.nBitPerSample = bit_depth;
-         pcm.ePCMMode = OMX_AUDIO_PCMModeLinear;
-
-        if(bSwapChannels == 0)
+		if(st)
 		{
-            pcm.eChannelMapping[1] = OMX_AUDIO_ChannelRF;
-            pcm.eChannelMapping[0] = OMX_AUDIO_ChannelLF;
+			OMX_ERRORTYPE error;
+			OMX_PARAM_PORTDEFINITIONTYPE param;
+			OMX_AUDIO_PARAM_PCMMODETYPE pcm;
+			int32_t s;
 
-         }
-		else
-		{
-			pcm.eChannelMapping[1] = OMX_AUDIO_ChannelLF;
-            pcm.eChannelMapping[0] = OMX_AUDIO_ChannelRF;
+			ret = 0;
+			*handle = st;
+
+			// create and start up everything
+			s = sem_init(&st->sema, 0, 1);
+			if(s != 0) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
+
+			st->bytes_per_sample = bytes_per_sample;
+			st->num_buffers = num_buffers;
+
+			st->client = ilclient_init();
+			if(st->client == NULL) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
+
+			ilclient_set_empty_buffer_done_callback(st->client, input_buffer_callback, st);
+
+			error = OMX_Init();
+			if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
+
+			ilclient_create_component(st->client, &st->audio_render, "audio_render", ILCLIENT_ENABLE_INPUT_BUFFERS | ILCLIENT_DISABLE_ALL_PORTS);
+			if(st->audio_render == NULL) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
+
+			st->list[0] = st->audio_render;
+
+			// set up the number/size of buffers
+			memset(&param, 0, sizeof(OMX_PARAM_PORTDEFINITIONTYPE));
+			param.nSize = sizeof(OMX_PARAM_PORTDEFINITIONTYPE);
+			param.nVersion.nVersion = OMX_VERSION;
+			param.nPortIndex = 100;
+
+			error = OMX_GetParameter(ILC_GET_HANDLE(st->audio_render), OMX_IndexParamPortDefinition, &param);
+			if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
+
+			param.nBufferSize = size;
+			param.nBufferCountActual = num_buffers;
+
+			error = OMX_SetParameter(ILC_GET_HANDLE(st->audio_render), OMX_IndexParamPortDefinition, &param);
+			if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
+
+			// set the pcm parameters
+			memset(&pcm, 0, sizeof(OMX_AUDIO_PARAM_PCMMODETYPE));
+			pcm.nSize = sizeof(OMX_AUDIO_PARAM_PCMMODETYPE);
+			pcm.nVersion.nVersion = OMX_VERSION;
+			pcm.nPortIndex = 100;
+			pcm.nChannels = OUT_CHANNELS(num_channels);
+			pcm.eNumData = OMX_NumericalDataSigned;
+			pcm.eEndian = OMX_EndianLittle;
+			pcm.nSamplingRate = OutputFreq;
+			pcm.bInterleaved = OMX_TRUE;
+			pcm.nBitPerSample = bit_depth;
+			pcm.ePCMMode = OMX_AUDIO_PCMModeLinear;
+
+			if(bSwapChannels == 0)
+			{
+				pcm.eChannelMapping[1] = OMX_AUDIO_ChannelRF;
+				pcm.eChannelMapping[0] = OMX_AUDIO_ChannelLF;
+
+			}
+			else
+			{
+				pcm.eChannelMapping[1] = OMX_AUDIO_ChannelLF;
+				pcm.eChannelMapping[0] = OMX_AUDIO_ChannelRF;
+			}
+
+			error = OMX_SetParameter(ILC_GET_HANDLE(st->audio_render), OMX_IndexParamAudioPcm, &pcm);
+			if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: Failed to Set OMX Parameters",__LINE__);
+
+			ilclient_change_component_state(st->audio_render, OMX_StateIdle);
+
+			//if(ilclient_enable_port_buffers(st->audio_render, 100, NULL, NULL, NULL) < 0)
+			if(ilclient_enable_port_buffers(st->audio_render, 100, audio_malloc, audio_free, NULL) < 0)
+			{
+				// error
+				ilclient_change_component_state(st->audio_render, OMX_StateLoaded);
+				ilclient_cleanup_components(st->list);
+
+				error = OMX_Deinit();
+				if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
+
+				ilclient_destroy(st->client);
+
+				sem_destroy(&st->sema);
+				free(st);
+				*handle = NULL;
+				return -1;
+			}
+			DebugMessage(M64MSG_INFO, "RPI Audio plugin Initialized. Output Frequency %d Hz", OutputFreq);
+			ilclient_change_component_state(st->audio_render, OMX_StateExecuting);
 		}
-
-         error = OMX_SetParameter(ILC_GET_HANDLE(st->audio_render), OMX_IndexParamAudioPcm, &pcm);
-         if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: Failed to Set OMX Parameters",__LINE__);
-
-         ilclient_change_component_state(st->audio_render, OMX_StateIdle);
-
-		if(ilclient_enable_port_buffers(st->audio_render, 100, NULL, NULL, NULL) < 0)
-        {
-            // error
-            ilclient_change_component_state(st->audio_render, OMX_StateLoaded);
-            ilclient_cleanup_components(st->list);
-
-            error = OMX_Deinit();
-            if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
-
-            ilclient_destroy(st->client);
-
-            sem_destroy(&st->sema);
-            free(st);
-            *handle = NULL;
-            return -1;
-		}
-		DebugMessage(M64MSG_INFO, "RPI Audio plugin Initialized. Output Frequency %d Hz", OutputFreq);
-		ilclient_change_component_state(st->audio_render, OMX_StateExecuting);
-	 }
-   }
+	}
 
 	return ret;
 }
 
 static int32_t audioplay_delete(AUDIOPLAY_STATE_T *st)
 {
-   OMX_ERRORTYPE error;
+	OMX_ERRORTYPE error;
 
-   ilclient_change_component_state(st->audio_render, OMX_StateIdle);
+	ilclient_change_component_state(st->audio_render, OMX_StateIdle);
 
-   error = OMX_SendCommand(ILC_GET_HANDLE(st->audio_render), OMX_CommandStateSet, OMX_StateLoaded, NULL);
-   if (error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
+	error = OMX_SendCommand(ILC_GET_HANDLE(st->audio_render), OMX_CommandStateSet, OMX_StateLoaded, NULL);
+	if (error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
 
-   ilclient_disable_port_buffers(st->audio_render, 100, st->user_buffer_list, NULL, NULL);
-   ilclient_change_component_state(st->audio_render, OMX_StateLoaded);
-   ilclient_cleanup_components(st->list);
+	ilclient_disable_port_buffers(st->audio_render, 100, st->user_buffer_list, NULL, NULL);
+	ilclient_change_component_state(st->audio_render, OMX_StateLoaded);
+	ilclient_cleanup_components(st->list);
 
-   error = OMX_Deinit();
-   if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
+	error = OMX_Deinit();
+	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
 
-   ilclient_destroy(st->client);
+	ilclient_destroy(st->client);
 
-   sem_destroy(&st->sema);
-   free(st);
+	sem_destroy(&st->sema);
+	free(st);
 
-   return 0;
+	return 0;
 }
 
 static uint8_t *audioplay_get_buffer(AUDIOPLAY_STATE_T *st)
 {
-   OMX_BUFFERHEADERTYPE *hdr = NULL;
+	OMX_BUFFERHEADERTYPE *hdr = NULL;
 
-   hdr = ilclient_get_input_buffer(st->audio_render, 100, 0);
+	hdr = ilclient_get_input_buffer(st->audio_render, 100, 0);
 
-   if(hdr)
-   {
-      // put on the user list
-      sem_wait(&st->sema);
+	if(hdr)
+	{
+		// put on the user list
+		sem_wait(&st->sema);
 
-      hdr->pAppPrivate = st->user_buffer_list;
-      st->user_buffer_list = hdr;
+		hdr->pAppPrivate = st->user_buffer_list;
+		st->user_buffer_list = hdr;
 
-      sem_post(&st->sema);
-   }
+		sem_post(&st->sema);
+	}
 
-   return hdr ? hdr->pBuffer : NULL;
+	return hdr ? hdr->pBuffer : NULL;
 }
 
-static int32_t audioplay_play_buffer(AUDIOPLAY_STATE_T *st,
-                              uint8_t *buffer,
-                              uint32_t length)
+static int32_t audioplay_play_buffer(AUDIOPLAY_STATE_T *st, uint8_t *buffer, uint32_t length)
 {
-   	OMX_BUFFERHEADERTYPE *hdr = NULL, *prev = NULL;
-   	int32_t ret = -1;
+	OMX_BUFFERHEADERTYPE *hdr = NULL, *prev = NULL;
+	int32_t ret = -1;
 
-   	sem_wait(&st->sema);
+	sem_wait(&st->sema);
 
-   	// search through user list for the right buffer header
-   	hdr = st->user_buffer_list;
-   	while(hdr != NULL && hdr->pBuffer != buffer && hdr->nAllocLen < length)
-   	{
-      	prev = hdr;
-      	hdr = hdr->pAppPrivate;
-   	}
+	// search through user list for the right buffer header
+	hdr = st->user_buffer_list;
+	while(hdr != NULL && hdr->pBuffer != buffer && hdr->nAllocLen < length)
+	{
+		prev = hdr;
+		hdr = hdr->pAppPrivate;
+	}
 
-   	if(hdr) // we found it, remove from list
-   	{
-      	ret = 0;
-      	if(prev)
-         	prev->pAppPrivate = hdr->pAppPrivate;
-      	else
-         	st->user_buffer_list = hdr->pAppPrivate;
-   	}
+	if(hdr) // we found it, remove from list
+	{
+		ret = 0;
+		if(prev)
+			prev->pAppPrivate = hdr->pAppPrivate;
+		else
+			st->user_buffer_list = hdr->pAppPrivate;
+	}
 
-   	sem_post(&st->sema);
+	sem_post(&st->sema);
 
 	if(hdr)
 	{
 		OMX_ERRORTYPE error;
 
 		hdr->pAppPrivate = NULL;
-      	hdr->nOffset = 0;
-      	hdr->nFilledLen = length;
+		hdr->nOffset = 0;
+		hdr->nFilledLen = length;
 
-      	error = OMX_EmptyThisBuffer(ILC_GET_HANDLE(st->audio_render), hdr);
-      	if(error != OMX_ErrorNone)
+		error = OMX_EmptyThisBuffer(ILC_GET_HANDLE(st->audio_render), hdr);
+		if(error != OMX_ErrorNone)
 		{
 			DebugMessage(M64MSG_ERROR, "Line %d: Failed on OMX_EmptyThisBuffer()",__LINE__);
 		}
-   	}
+	}
 	else
 	{
 		DebugMessage(M64MSG_ERROR, "Line %d: Failed to find header. SECONDARY_BUFFER_SIZE may be too large", __LINE__);
 	}
 
-   return ret;
+	return ret;
 }
 
 static int32_t audioplay_set_dest(AUDIOPLAY_STATE_T *st, const char *name)
 {
-   int32_t success = -1;
-   OMX_CONFIG_BRCMAUDIODESTINATIONTYPE ar_dest;
+	int32_t success = -1;
+	OMX_CONFIG_BRCMAUDIODESTINATIONTYPE ar_dest;
 
-   if (name && strlen(name) < sizeof(ar_dest.sName))
-   {
-      OMX_ERRORTYPE error;
-      memset(&ar_dest, 0, sizeof(ar_dest));
-      ar_dest.nSize = sizeof(OMX_CONFIG_BRCMAUDIODESTINATIONTYPE);
-      ar_dest.nVersion.nVersion = OMX_VERSION;
-      strcpy((char *)ar_dest.sName, name);
+	if (name && strlen(name) < sizeof(ar_dest.sName))
+	{
+		OMX_ERRORTYPE error;
+		memset(&ar_dest, 0, sizeof(ar_dest));
+		ar_dest.nSize = sizeof(OMX_CONFIG_BRCMAUDIODESTINATIONTYPE);
+		ar_dest.nVersion.nVersion = OMX_VERSION;
+		strcpy((char *)ar_dest.sName, name);
 
-      error = OMX_SetConfig(ILC_GET_HANDLE(st->audio_render), OMX_IndexConfigBrcmAudioDestination, &ar_dest);
-      if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "Line %d: Failed to set OMX Configuration (AudioDestination)", __LINE__);
-      success = 0;
+		error = OMX_SetConfig(ILC_GET_HANDLE(st->audio_render), OMX_IndexConfigBrcmAudioDestination, &ar_dest);
+		if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "Line %d: Failed to set OMX Configuration (AudioDestination)", __LINE__);
+		success = 0;
 
-	DebugMessage(M64MSG_VERBOSE, "Audio output to %s", name);
-   }
+		DebugMessage(M64MSG_VERBOSE, "Audio output to %s", name);
+	}
 
-   return success;
+	return success;
 }
 
 /* Get the latency in ms for audio */
 uint32_t audioplay_get_latency(AUDIOPLAY_STATE_T *st)
 {
-   	OMX_PARAM_U32TYPE param;
-   	OMX_ERRORTYPE error;
+	OMX_PARAM_U32TYPE param;
+	OMX_ERRORTYPE error;
 
 	memset(&param, 0, sizeof(OMX_PARAM_U32TYPE));
-   	param.nSize = sizeof(OMX_PARAM_U32TYPE);
+	param.nSize = sizeof(OMX_PARAM_U32TYPE);
 	param.nVersion.nVersion = OMX_VERSION;
 	param.nPortIndex = 100;
 
-   	error = OMX_GetConfig(ILC_GET_HANDLE(st->audio_render), OMX_IndexConfigAudioRenderingLatency, &param);
-   	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "Line %d: Failed to get OMX Config Parameter ", __LINE__);
+	error = OMX_GetConfig(ILC_GET_HANDLE(st->audio_render), OMX_IndexConfigAudioRenderingLatency, &param);
+	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "Line %d: Failed to get OMX Config Parameter ", __LINE__);
 
-   return param.nU32 * 1000 / OutputFreq;
+	DEBUG_PRINT("audio latency %dms\n", param.nU32 * 1000 / OutputFreq);
+	return param.nU32 * 1000 / OutputFreq;
 }
 
 
@@ -625,18 +656,18 @@ static uint32_t SendBufferToAudio(int32_t *pCurrentBuffer)
 	// sending the next packet
 	latency = audioplay_get_latency(st);
 
-	if(latency > uiLatency)
+	if(latency > uiLatency - 10)
 	{
 		DebugMessage(M64MSG_VERBOSE, "Waiting %dms ", latency - uiLatency);
-		usleep((latency - uiLatency) * 1000 );
+		usleep((latency - uiLatency + 10) * 1000 );
 	}
 	else if (latency == 0)
 	{
 		DebugMessage(M64MSG_WARNING, "Audio Buffer under run(%d)", uiUnderRunCount);
 		uiUnderRunCount++;
 	}
-
-	audioplay_play_buffer(st, (uint8_t*)pCurrentBuffer, (uiSecondaryBufferSamples * SAMPLE_SIZE_BITS * NUM_CHANNELS)>>3);	
+	DEBUG_PRINT("audioplay_play_buffer()\n");
+	audioplay_play_buffer(st, (uint8_t*)pCurrentBuffer, (uiSecondaryBufferSamples * SAMPLE_SIZE_BITS * NUM_CHANNELS)>>3);
 
 	return 0;
 }
@@ -657,6 +688,17 @@ EXPORT void CALL AiLenChanged( void )
 	newsamplerate = OutputFreq * 100 / speed_factor;
 	oldsamplerate = GameFreq;
 
+	//DEBUG_PRINT("AiLenChanged()\n");
+
+	if (uiUnderrunMode == 1)
+	{
+		int i;
+		i = (100 * uiLatency) / (audioplay_get_latency(st) + 1);
+
+		if (i > 200) i = 200;
+		newsamplerate = OutputFreq * i / (speed_factor);
+	}
+
 	if (critical_failure == 1) return;
 	if (!l_PluginInit) return;
 
@@ -665,7 +707,7 @@ EXPORT void CALL AiLenChanged( void )
 	p = (int32_t*)(AudioInfo.RDRAM + (*AudioInfo.AI_DRAM_ADDR_REG & 0xFFFFFF));
 
 	if (pCurrentBuffer == NULL)
-    	{
+	{
 		while((pCurrentBuffer = (int32_t*)audioplay_get_buffer(st)) == NULL) usleep(1*1000);
 	}
 
@@ -703,119 +745,137 @@ EXPORT void CALL AiLenChanged( void )
 				uiBufferIndex = 0;
 
 				while((pCurrentBuffer = (int32_t*)audioplay_get_buffer(st)) == NULL)
-				{ 
-					DebugMessage(M64MSG_VERBOSE, "Can't get next pCurrentBuffer for Audio");	
-					usleep(1*1000);
-				}
-			}
-		}
-	}
-	else if (newsamplerate == oldsamplerate)
-	{
-		if (uiBufferIndex + (uiAudioBytes / sizeof(int32_t)) >= uiSecondaryBufferSamples)
-		{
-			uint32_t bytesCanCopy = (uiSecondaryBufferSamples - uiBufferIndex)*sizeof(int32_t);
-
-			memcpy((void*) &pCurrentBuffer[ uiBufferIndex ],(const void*) p, bytesCanCopy); 
-
-			SendBufferToAudio(pCurrentBuffer);
-
-			while((pCurrentBuffer = (int32_t*)audioplay_get_buffer(st)) == NULL)
-			{
-				DebugMessage(M64MSG_VERBOSE, "Can't get next pCurrentBuffer for Audio");	
-				usleep(1*1000);
-			}
-
-			p+=	bytesCanCopy/sizeof(int32_t);
-
-			memcpy((void*) pCurrentBuffer,(const void*) p, uiAudioBytes - bytesCanCopy); 
-			uiBufferIndex = (uiAudioBytes - bytesCanCopy) / sizeof(int32_t);
-		}
-		else
-		{
-			memcpy((void*) &pCurrentBuffer[ uiBufferIndex ],(const void*) p, uiAudioBytes); 
-			uiBufferIndex += uiAudioBytes / sizeof(int32_t);
-		}
-	}
-	else // newsamplerate < oldsamplerate, this only happens when speed_factor > 1
-	{
-
-	#if 1
-		int j = 0;
-		int inc = ((oldsamplerate << 10) / newsamplerate);
-		int * start = p;
-
-		while ((j>>8) < uiAudioBytes )
-		{
-			pCurrentBuffer[ uiBufferIndex ] = *p;
-
-			j += inc ; //4 * oldsamplerate / newsamplerate;
-			p = start+(j>>10); // (oldsamplerate / newsamplerate);
-
-			uiBufferIndex ++;
-
-			if (uiBufferIndex >= uiSecondaryBufferSamples)
-			{
-				SendBufferToAudio(pCurrentBuffer);
-				uiBufferIndex = 0;
-
-				while((pCurrentBuffer = (int32_t*)audioplay_get_buffer(st)) == NULL)
 				{
 					DebugMessage(M64MSG_VERBOSE, "Can't get next pCurrentBuffer for Audio");
 					usleep(1*1000);
 				}
 			}
-
 		}
-	#else
-	int scaledR = ((oldsamplerate << 10) / newsamplerate);
+	}
+	/*else if (newsamplerate == oldsamplerate)
+	{
+		int repeat = 1;
+		int * start = (int*)p;
+		if (uiUnderrunMode == 2 && audioplay_get_latency(st) < uiLatency/2) repeat = 2;
 
-	asm volatile(	"push {r0, r1, r2, r3, r4, r5, r6, r7, r8, r9}	\n"
-			"mov r0, %0			\n" // pCurrentBuffer
-			"mov r1, %1 			\n" // uiBufferIndex
-			"mov r2, %2			\n" // Start of Audio Data
-			"mov r3, %3			\n" // length of Audio
-			"mov r4, %4			\n" // ratio
-			"mov r5, %5			\n" // Secondary Samples
-			"				\n"
-			"mov r6, r3			\n" // Audio data left to sample
-			"mov r7, #0			\n" // Offset from p
-			"mov r8, r2			\n" // Next Audio Data address
-			"1:				\n"
-			"ldr r9, [r8]			\n" // get word
-			"str r9, [r0,r1 LSR 2]		\n" // store sample
-			"add r1, #1			\n" // uiBufferIndex ++
-			"cmp r1, r5			\n" // if uiBufferIndex == uiSecondarySamples
-			"beq 2				\n" // then goto 2
-			"add r7, r4			\n" // inc += ratio
-			"mov r8, r2 lsl #2		\n" // p = start ...
-			"add r8, r7 lsl #12		\n" // p = start + j >> 10 (want to round to 32 bit word)_
-			"lsr r8, #2			\n" // round down to 32bit word
-			"subs r6, #4			\n" // consumed 4 bytes
-			"bgt 1				\n"
-			"b 4				\n"
-			"				\n"
-			"2:				\n"
-			"push {r2, r3, r4}		\n" // store scratch registers
-			"bl <SendBufferToAudio>	\n" // call SendBufferToAudio();
-			"pop {r2, r3, r4}		\n" // restore scratch registers
-			"mov r1, #0			\n" // if uiBufferIndex == uiSecondaryBufferSamples then uiBufferIndex = 0
-			"3:				\n"
-			"bl <audioplay-get_buffer()> 	\n"
-			"cmp r0, #0			\n" // is pCurrentBuffer NULL?
-			"bgt 1"
-			"mov r0, #1000			\n" // if it is then set 1ms Wait
-			"bl <usleep>			\n" // sleep for r0
-			"b 3				\n" // now try and get new pCurrentBuffer
-			"				\n"
-			"4:				\n" // tidy up
-			"pop {r0, r1, r2, r3, r4, r5, r6, r7, r8, r9}	\n"
-			: "+r" (pCurrentBuffer), "+r" (uiBufferIndex)
-			: "r" (p), "r" (uiAudioBytes), "r"(scaledR), "r"(uiSecondarySamples)
-			: "cc"
-			);
+		while (repeat)
+		{
+			if (uiBufferIndex + (uiAudioBytes / sizeof(int32_t)) >= uiSecondaryBufferSamples)
+			{
+				uint32_t bytesCanCopy = (uiSecondaryBufferSamples - uiBufferIndex)*sizeof(int32_t);
 
-	#endif
+				memcpy((void*) &pCurrentBuffer[ uiBufferIndex ],(const void*) p, bytesCanCopy); 
+
+				SendBufferToAudio(pCurrentBuffer);
+
+				while((pCurrentBuffer = (int32_t*)audioplay_get_buffer(st)) == NULL)
+				{
+					DebugMessage(M64MSG_VERBOSE, "Can't get next pCurrentBuffer for Audio");	
+					usleep(1*1000);
+				}
+
+				p+=	bytesCanCopy/sizeof(int32_t);
+
+				memcpy((void*) pCurrentBuffer,(const void*) p, uiAudioBytes - bytesCanCopy); 
+				uiBufferIndex = (uiAudioBytes - bytesCanCopy) / sizeof(int32_t);
+			}
+			else
+			{
+				memcpy((void*) &pCurrentBuffer[ uiBufferIndex ],(const void*) p, uiAudioBytes); 
+				uiBufferIndex += uiAudioBytes / sizeof(int32_t);
+			}
+			repeat --;
+			p = start;
+		}
+	}*/
+	else // newsamplerate < oldsamplerate, this only happens when speed_factor > 1
+	{
+
+#if 1
+		int inc = ((oldsamplerate << 10) / newsamplerate);
+		int j = 0;
+		volatile int * start = p;
+		int repeat = 1;
+
+		if (uiUnderrunMode == 2 && audioplay_get_latency(st) < uiLatency/2) repeat = 2;
+
+		while (repeat)
+		{
+			while ((j>>8) < uiAudioBytes )
+			{
+				pCurrentBuffer[ uiBufferIndex ] = *p;
+
+				j += inc ; //4 * oldsamplerate / newsamplerate;
+				p = start+(j>>10); // (oldsamplerate / newsamplerate);
+
+				uiBufferIndex ++;
+
+				if (uiBufferIndex >= uiSecondaryBufferSamples)
+				{
+					SendBufferToAudio(pCurrentBuffer);
+					uiBufferIndex = 0;
+
+					while((pCurrentBuffer = (int32_t*)audioplay_get_buffer(st)) == NULL)
+					{
+						DebugMessage(M64MSG_VERBOSE, "Can't get next pCurrentBuffer for Audio");
+						usleep(1*1000);
+					}
+				}
+			}
+
+			repeat --;
+			j= 0;
+			p = start;
+		}
+#else
+		int scaledR = ((oldsamplerate << 10) / newsamplerate);
+
+		asm volatile(	"push {r0, r1, r2, r3, r4, r5, r6, r7, r8, r9}	\n"
+				"mov r0, %0			\n" // pCurrentBuffer
+				"mov r1, %1 			\n" // uiBufferIndex
+				"mov r2, %2			\n" // Start of Audio Data
+				"mov r3, %3			\n" // length of Audio
+				"mov r4, %4			\n" // ratio
+				"mov r5, %5			\n" // Secondary Samples
+				"				\n"
+				"mov r6, r3			\n" // Audio data left to sample
+				"mov r7, #0			\n" // Offset from p
+				"mov r8, r2			\n" // Next Audio Data address
+				"1:				\n"
+				"ldr r9, [r8]			\n" // get word
+				"str r9, [r0,r1 LSR 2]		\n" // store sample
+				"add r1, #1			\n" // uiBufferIndex ++
+				"cmp r1, r5			\n" // if uiBufferIndex == uiSecondarySamples
+				"beq 2				\n" // then goto 2
+				"add r7, r4			\n" // inc += ratio
+				"mov r8, r2 lsl #2		\n" // p = start ...
+				"add r8, r7 lsl #12		\n" // p = start + j >> 10 (want to round to 32 bit word)_
+				"lsr r8, #2			\n" // round down to 32bit word
+				"subs r6, #4			\n" // consumed 4 bytes
+				"bgt 1				\n"
+				"b 4				\n"
+				"				\n"
+				"2:				\n"
+				"push {r2, r3, r4}		\n" // store scratch registers
+				"bl <SendBufferToAudio>	\n" // call SendBufferToAudio();
+				"pop {r2, r3, r4}		\n" // restore scratch registers
+				"mov r1, #0			\n" // if uiBufferIndex == uiSecondaryBufferSamples then uiBufferIndex = 0
+				"3:				\n"
+				"bl <audioplay-get_buffer()> 	\n"
+				"cmp r0, #0			\n" // is pCurrentBuffer NULL?
+				"bgt 1"
+				"mov r0, #1000			\n" // if it is then set 1ms Wait
+				"bl <usleep>			\n" // sleep for r0
+				"b 3				\n" // now try and get new pCurrentBuffer
+				"				\n"
+				"4:				\n" // tidy up
+				"pop {r0, r1, r2, r3, r4, r5, r6, r7, r8, r9}	\n"
+				: "+r" (pCurrentBuffer), "+r" (uiBufferIndex)
+				  : "r" (p), "r" (uiAudioBytes), "r"(scaledR), "r"(uiSecondarySamples)
+				    : "cc"
+		);
+
+#endif
 
 	}
 }
@@ -852,93 +912,134 @@ static void InitializeAudio(int freq)
 
 	switch (uiOutputFrequencyMode)
 	{
-		case 0:										// Select Frequency ROM requests
-			OutputFreq = freq;
-			break;
-		case 1:										//Audo
-			if (uiOutputPort == 1)
+	case 0:										// Select Frequency ROM requests
+		OutputFreq = freq;
+		break;
+	case 1:										//Audo
+		if (uiOutputPort == 1)
+		{
+			if (0 == vc_tv_hdmi_audio_supported(EDID_AudioFormat_ePCM, OUT_CHANNELS(NUM_CHANNELS), freq, SAMPLE_SIZE_BITS))
 			{
-				if (0 == vc_tv_hdmi_audio_supported(EDID_AudioFormat_ePCM, OUT_CHANNELS(NUM_CHANNELS), freq, SAMPLE_SIZE_BITS)) 
-				{
-					DebugMessage(M64MSG_VERBOSE, "HDMI supports requested Frequency");
-					break;
-				}
+				DebugMessage(M64MSG_VERBOSE, "HDMI supports requested Frequency");
+				break;
+			}
 			DebugMessage(M64MSG_VERBOSE, "HDMI failed to get requested Frequency");
-			}
-			else
-			{
-				DebugMessage(M64MSG_VERBOSE, "Analogue Mode 1 not supported. Selecting Mode 2");
-			}
-		case 2:										// Select Frequency less than ROM frequency
-			if(freq >= 44100)
-			{
-				OutputFreq = 44100;
-			}
-			else if(freq >= 32000)
-			{
-				OutputFreq = 32000;
-			}
-			else if(freq >= 22050)
-			{
-				OutputFreq = 22050;
-			}
-			else
-			{
-				OutputFreq = 11025;
-			}
-			break;
-		case 3:
-			if(freq < 11025)
-			{
-				OutputFreq = 11025;
-			}
-			else if(freq < 22050)
-			{
-				OutputFreq = 22050;
-			}
-			else if(freq < 32000)
-			{
-				OutputFreq = 32000;
-			}else
-			{
-				OutputFreq = 44100;
-			}
-			break;
-		default: 									// User override frequency
-			if (uiOutputFrequencyMode >= 10000)
-			{
-				OutputFreq = uiOutputFrequencyMode;
+		}
+		else
+		{
+			DebugMessage(M64MSG_VERBOSE, "Analogue Mode 1 not supported. Selecting Mode 2");
+		}
+	case 2:										// Select Frequency less than ROM frequency
+		if(freq >= 44100)
+		{
+			OutputFreq = 44100;
+		}
+		else if(freq >= 32000)
+		{
+			OutputFreq = 32000;
+		}
+		else if(freq >= 22050)
+		{
+			OutputFreq = 22050;
+		}
+		else
+		{
+			OutputFreq = 11025;
+		}
+		break;
+	case 3:
+		if(freq < 11025)
+		{
+			OutputFreq = 11025;
+		}
+		else if(freq < 22050)
+		{
+			OutputFreq = 22050;
+		}
+		else if(freq < 32000)
+		{
+			OutputFreq = 32000;
+		}else
+		{
+			OutputFreq = 44100;
+		}
+		break;
+	default: 									// User override frequency
+		if (uiOutputFrequencyMode >= 10000)
+		{
+			OutputFreq = uiOutputFrequencyMode;
 
-				// Does not work for me but worth a try ...
-				if (0 == vc_tv_hdmi_audio_supported(EDID_AudioFormat_ePCM, OUT_CHANNELS(NUM_CHANNELS), OutputFreq, SAMPLE_SIZE_BITS))
-				{
-					DebugMessage(M64MSG_VERBOSE, "HDMI supports Audio at %d Hz", OutputFreq);
-				}
-				else
-				{
-					DebugMessage(M64MSG_WARNING, "HDMI does not support Audio at %d Hz", OutputFreq);
-				}
+			// Does not work for me but worth a try ...
+			if (0 == vc_tv_hdmi_audio_supported(EDID_AudioFormat_ePCM, OUT_CHANNELS(NUM_CHANNELS), OutputFreq, SAMPLE_SIZE_BITS))
+			{
+				DebugMessage(M64MSG_VERBOSE, "HDMI supports Audio at %d Hz", OutputFreq);
 			}
 			else
 			{
-				OutputFreq = 10000;
+				DebugMessage(M64MSG_VERBOSE, "HDMI does not support Audio at %d Hz", OutputFreq);
 			}
-			break;
+		}
+		else
+		{
+			OutputFreq = 10000;
+		}
+		break;
+	}
+
+	if (pBuffer)
+	{ 
+		int x;
+		for (x = 0; x < uiNumBuffers; x++ ) vcos_free(pBuffer[x]);
+		
+		free(pBuffer);
+		pBuffer = NULL;
 	}
 
 	//if (st != NULL) audioplay_delete(st);
+	uiNumBuffers = 2 + OutputFreq * uiLatency / (uiSecondaryBufferSamples*1000);
 
+	DebugMessage(M64MSG_INFO,"uiNumBuffers = %d", uiNumBuffers);
+	
+	pBuffer = (void**)malloc(uiNumBuffers * sizeof(void*));
+	
+	int x;
+	for (x=0; x < uiNumBuffers; x++) pBuffer[x] = vcos_malloc_aligned(buffer_size, 16, "");
+		
 	audioplay_create(&st, NUM_CHANNELS, SAMPLE_SIZE_BITS, uiNumBuffers, buffer_size);
 
-	audioplay_set_dest(st, audio_dest[uiOutputPort]); // hdmi for now
+	audioplay_set_dest(st, audio_dest[uiOutputPort]);
 
+	// load up some blank sound to stop underrun messages at start
+	static int32_t 	*pCurrentBuffer = NULL;
+	int i;
+
+	for (i=0; i < uiNumBuffers/2; i++)
+	{
+		while((pCurrentBuffer = (int32_t*)audioplay_get_buffer(st)) == NULL)
+		{
+			DebugMessage(M64MSG_VERBOSE, "Can't get next pCurrentBuffer for Audio");	
+			usleep(1*1000);
+		}
+
+		memset(pCurrentBuffer, 0, buffer_size);
+	}
 }
+
 EXPORT void CALL RomClosed( void )
 {
 	DebugMessage(M64MSG_VERBOSE, "Cleaning up RPI sound plugin...");
 
- 	audioplay_delete(st);
+	audioplay_delete(st);
 
+	if (pBuffer)
+	{
+		int x;
+		for (x = 0; x < uiNumBuffers; x++ ) vcos_free(pBuffer[x]);
+		free(pBuffer);
+		pBuffer = NULL;
+	
+	}
+	
 	if (!l_PluginInit)
 		return;
 	if (critical_failure == 1)
@@ -967,8 +1068,9 @@ static void ReadConfig(void)
 	uiLatency = 				ConfigGetParamInt(l_ConfigAudio, "LATENCY");
 	VolDelta = 					ConfigGetParamInt(l_ConfigAudio, "VOLUME_ADJUST");
 	VolPercent = 				ConfigGetParamInt(l_ConfigAudio, "VOLUME_DEFAULT");
-	uiNumBuffers = 				ConfigGetParamInt(l_ConfigAudio, "DEFAULT_NUM_BUFFERS");
+	//uiNumBuffers = 				ConfigGetParamInt(l_ConfigAudio, "DEFAULT_NUM_BUFFERS");
 	uiOutputFrequencyMode = 	ConfigGetParamInt(l_ConfigAudio, "DEFAULT_MODE");
+	uiUnderrunMode = 			ConfigGetParamInt(l_ConfigAudio, "UNDERRUN_MODE");
 
 	if (uiLatency <= MIN_LATENCY_TIME) uiLatency = MIN_LATENCY_TIME + 1;
 
@@ -984,9 +1086,9 @@ static int VolumeGetUnmutedLevel(void)
 static void VolumeCommit(void)
 {
 	int levelToCommit = VolIsMuted ? 0 : VolPercent;
-	
+
 	VolSDL = 100 * levelToCommit / 100;
-	
+
 }
 
 EXPORT void CALL VolumeMute(void)
