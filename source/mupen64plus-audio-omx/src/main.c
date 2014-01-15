@@ -42,7 +42,6 @@
 #include "m64p_config.h"
 
 #include "main.h"
-#include "volume.h"
 #include "osal_dynamiclib.h"
 
 extern uint32_t SDL_GetTicks(void);
