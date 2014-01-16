@@ -455,16 +455,7 @@ static int32_t audioplay_create(uint32_t num_channels,
 		DebugMessage(M64MSG_ERROR, "%d OMX_GetHandle() failed. Error 0x%X", __LINE__, error);
 		critical_failure = 1;
 	}
-/*
-	error = OMX_SendCommand(OMX_Handle, OMX_CommandStateSet, OMX_StateLoaded, NULL);
-	if(error != OMX_ErrorNone)
-	{ 
-		DebugMessage(M64MSG_ERROR, "line %d: OMX_StateLoaded Failed",__LINE__);
-		critical_failure = 1;
-		return -1;
-	}*/
-	//audio_wait_for_state(OMX_StateLoaded);
-	
+
 	// set up the number/size of buffers
 	memset(&param, 0, sizeof(OMX_PARAM_PORTDEFINITIONTYPE));
 	param.nSize = sizeof(OMX_PARAM_PORTDEFINITIONTYPE);
@@ -843,26 +834,16 @@ EXPORT int CALL InitiateAudio( AUDIO_INFO Audio_Info )
 {
 	if (!l_PluginInit)
 		return 0;
-	//int32_t status;
-
+	
 	bcm_host_init(); 
 	AudioInfo = Audio_Info;
 
 	OMX_ERRORTYPE error;
-	//OMX_CALLBACKTYPE callbacks;
-
+	
 	error = OMX_Init();
 	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d OMX_Init() failed", __LINE__);
-	/*
-	callbacks.EventHandler = EventHandler;
-	callbacks.EmptyBufferDone = EmptyBufferDone;
 	
-	error = OMX_GetHandle(&OMX_Handle, "OMX.broadcom.audio_render", NULL, &callbacks);
-	if(error != OMX_ErrorNone){
-		DebugMessage(M64MSG_ERROR, "%d OMX_GetHandle() failed. Error 0x%X", __LINE__, error);
-		critical_failure = 1;
-	}*/
-	return 1;
+return 1;
 }
 
 static void InitializeAudio(int freq)
