@@ -82,7 +82,7 @@ extern uint32_t SDL_GetTicks(void);
 #define CTTW_SLEEP_TIME 10
 #define MIN_LATENCY_TIME 10
 
-//#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT(...)
@@ -158,7 +158,7 @@ static uint32_t 	uiCurrentBufferLength = 0;
 //#define MONITOR_BUFFER_READY
 
 static pthread_mutex_t 	audioLock;
-static OMX_STATETYPE omxState = OMX_StateLoaded;
+static OMX_STATETYPE omxState = 0;
 #ifdef MONITOR_BUFFER_READY
 static uint32_t buffersReady = 0;
 #endif
@@ -443,21 +443,27 @@ static int32_t audioplay_create(uint32_t num_channels,
 	
 	OMX_PARAM_PORTDEFINITIONTYPE param;
 	OMX_AUDIO_PARAM_PCMMODETYPE pcm;
-	OMX_CALLBACKTYPE callbacks;
 	OMX_STATETYPE state;
 	int i;
 
-	error = OMX_Init();
-	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d OMX_Init() failed", __LINE__);
-	
+	OMX_CALLBACKTYPE callbacks;
 	callbacks.EventHandler = EventHandler;
 	callbacks.EmptyBufferDone = EmptyBufferDone;
 	
 	error = OMX_GetHandle(&OMX_Handle, "OMX.broadcom.audio_render", NULL, &callbacks);
 	if(error != OMX_ErrorNone){
 		DebugMessage(M64MSG_ERROR, "%d OMX_GetHandle() failed. Error 0x%X", __LINE__, error);
-		return -1;
+		critical_failure = 1;
 	}
+/*
+	error = OMX_SendCommand(OMX_Handle, OMX_CommandStateSet, OMX_StateLoaded, NULL);
+	if(error != OMX_ErrorNone)
+	{ 
+		DebugMessage(M64MSG_ERROR, "line %d: OMX_StateLoaded Failed",__LINE__);
+		critical_failure = 1;
+		return -1;
+	}*/
+	//audio_wait_for_state(OMX_StateLoaded);
 	
 	// set up the number/size of buffers
 	memset(&param, 0, sizeof(OMX_PARAM_PORTDEFINITIONTYPE));
@@ -468,8 +474,9 @@ static int32_t audioplay_create(uint32_t num_channels,
 	param.nBufferCountActual = num_buffers;
 	param.format.audio.eEncoding = OMX_AUDIO_CodingPCM;
 
+
 	error = OMX_SetParameter(OMX_Handle, OMX_IndexParamPortDefinition, &param);
-	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d",__LINE__);
+	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: Failed to set OMX_IndexParamPortDefinition",__LINE__);
 
 	// set the pcm parameters
 	memset(&pcm, 0, sizeof(OMX_AUDIO_PARAM_PCMMODETYPE));
@@ -532,7 +539,12 @@ static int32_t audioplay_create(uint32_t num_channels,
 
 	//We can now go to IdleState
 	error = OMX_SendCommand(OMX_Handle, OMX_CommandStateSet, OMX_StateIdle, NULL);
-	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: OMX_SendCommand() Failed. Error 0x%X",__LINE__, error);
+	if(error != OMX_ErrorNone)
+	{ 	
+		DebugMessage(M64MSG_ERROR, "line %d: OMX_SendCommand() Failed. Error 0x%X",__LINE__, error);
+		critical_failure = 1;
+		return -1;
+	}
 	audio_wait_for_state(OMX_StateIdle);
 
 	// check component is in the right state to accept buffers
@@ -540,6 +552,7 @@ static int32_t audioplay_create(uint32_t num_channels,
 	if (error != OMX_ErrorNone || !(state == OMX_StateIdle || state == OMX_StateExecuting || state == OMX_StatePause))
 	{
 		DebugMessage(M64MSG_ERROR, "OMX not in correct state. state %d, error %d", state, error );
+		critical_failure = 1;
 		return -1;
 	}
 
@@ -559,6 +572,7 @@ static int32_t audioplay_create(uint32_t num_channels,
 		if (error != OMX_ErrorNone )
 		{
 			DebugMessage(M64MSG_ERROR, "Failed to allocate buffer[%d] for OMX. error 0x%X. ", i, error);
+			critical_failure = 1;
 			return -1;
 		}
 	}
@@ -566,17 +580,21 @@ static int32_t audioplay_create(uint32_t num_channels,
 	uiCurrentBufferLength = 0;
 	uiBufferIndex = 0;
 	pNextAudioSample = (uint32_t*)(audioBuffers[uiBufferIndex]->pBuffer);
-
-	DebugMessage(M64MSG_INFO, "OMX Audio plugin Initialized. Output Frequency %d Hz", OutputFreq);
-
+	
 	error = OMX_SendCommand(OMX_Handle, OMX_CommandPortEnable, 100, NULL);
 	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: OMX_CommandPortEnable Failed",__LINE__);
 
 	error = OMX_SendCommand(OMX_Handle, OMX_CommandStateSet, OMX_StateExecuting, NULL);
-	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: OMX_StateExecuting Failed",__LINE__);
-
+	if(error != OMX_ErrorNone)
+	{ 
+		DebugMessage(M64MSG_ERROR, "line %d: OMX_StateExecuting Failed",__LINE__);
+		critical_failure = 1;
+		return -1;
+	}
 	audio_wait_for_state(OMX_StateExecuting);
-	
+
+	DebugMessage(M64MSG_INFO, "OMX Audio plugin Initialized. Output Frequency %d Hz", OutputFreq);
+
 	for (i = 0; i < num_buffers; i++)
 	{
 		memset(audioBuffers[i]->pBuffer, 0, buffer_size);
@@ -708,6 +726,8 @@ EXPORT void CALL AiLenChanged( void )
 	int oldsamplerate, newsamplerate;
 
 	if (!pNextAudioSample) return;
+	if (critical_failure == 1) return;
+	if (!l_PluginInit) return;
 
 	newsamplerate = OutputFreq * 100 / speed_factor;
 	oldsamplerate = GameFreq;
@@ -723,8 +743,7 @@ EXPORT void CALL AiLenChanged( void )
 		newsamplerate = OutputFreq * i / (speed_factor);
 	}
 
-	if (critical_failure == 1) return;
-	if (!l_PluginInit) return;
+	
 
 	uiAudioBytes = (uint32_t)(*AudioInfo.AI_LEN_REG);
 
@@ -829,13 +848,27 @@ EXPORT int CALL InitiateAudio( AUDIO_INFO Audio_Info )
 	bcm_host_init(); 
 	AudioInfo = Audio_Info;
 
+	OMX_ERRORTYPE error;
+	//OMX_CALLBACKTYPE callbacks;
+
+	error = OMX_Init();
+	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d OMX_Init() failed", __LINE__);
+	/*
+	callbacks.EventHandler = EventHandler;
+	callbacks.EmptyBufferDone = EmptyBufferDone;
+	
+	error = OMX_GetHandle(&OMX_Handle, "OMX.broadcom.audio_render", NULL, &callbacks);
+	if(error != OMX_ErrorNone){
+		DebugMessage(M64MSG_ERROR, "%d OMX_GetHandle() failed. Error 0x%X", __LINE__, error);
+		critical_failure = 1;
+	}*/
 	return 1;
 }
 
 static void InitializeAudio(int freq)
 {
 	if (freq < 4000) return; 			// Sometimes a bad freq is requested so ignore it 
-	if (critical_failure == 1) return;
+	if (critical_failure) return;
 	GameFreq = freq;
 
 
@@ -924,14 +957,13 @@ static void InitializeAudio(int freq)
 		for (x = 0; x < uiNumBuffers; x++ ) OMX_FreeBuffer(OMX_Handle, PORT_INDEX, audioBuffers[x]);
 		free(audioBuffers);
 		audioBuffers = NULL;
-		OMX_Deinit();
 	}
 
 	uiNumBuffers = 2 + OutputFreq * uiLatency / (uiSecondaryBufferSamples*1000);
 
 	audioplay_create(NUM_CHANNELS, SAMPLE_SIZE_BITS, uiNumBuffers, buffer_size);
 
-	audioplay_set_dest(audio_dest[uiOutputPort]);
+	if (!critical_failure) audioplay_set_dest(audio_dest[uiOutputPort]);
 
 VolumeCommit();
 }
