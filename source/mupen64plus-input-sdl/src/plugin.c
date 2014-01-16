@@ -935,7 +935,10 @@ EXPORT int CALL RomOpen(void)
 *******************************************************************/
 EXPORT void CALL SDL_KeyDown(int keymod, int keysym)
 {
-    myKeyState[keysym] = 1;
+#ifdef _DEBUG
+    if (!myKeyState[keysym]) printf("Input: mykeystate[%d] = 1 %d\n", keysym, keymod);
+#endif
+	myKeyState[keysym] = 1;
 }
 
 /******************************************************************
@@ -947,6 +950,9 @@ EXPORT void CALL SDL_KeyDown(int keymod, int keysym)
 *******************************************************************/
 EXPORT void CALL SDL_KeyUp(int keymod, int keysym)
 {
-    myKeyState[keysym] = 0;
+#ifdef _DEBUG
+    if (myKeyState[keysym]) printf("Input: mykeystate[%d] = 0 %d\n", keysym, keymod);
+#endif
+	myKeyState[keysym] = 0;
 }
 

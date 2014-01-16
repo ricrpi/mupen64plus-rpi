@@ -596,13 +596,12 @@ int RPI_NextXEvent(XEvent* xEvent)
 		int byteToRead =0;
 		int updateState =0;
 
-		
 		/* read scan code from stdin */
 		res = read(0, &buf[0], 1);
 		/* keep reading til there's no more*/
 		if (res > 0)
 		{
-			//DEBUG_PRINT("keyboard input: %d, 0x%x 0x%x -> SDL key %d %d\n",res, buf[0], buf[1], RAWtoSDL[buf[0]&0x7F], RAWtoSDL[buf[1]&0x7F]);
+			printf("keyboard input: %d, 0x%x 0x%x -> SDL key %d %d\n",res, buf[0], buf[1], RAWtoSDL[buf[0]&0x7F], RAWtoSDL[buf[1]&0x7F]);
 
 			//escape key
 			if (buf[0] == 0xe0)
@@ -633,17 +632,18 @@ int RPI_NextXEvent(XEvent* xEvent)
 
 			if ( buf[byteToRead] & 0x80 )
 			{
-					xEvent->type = KeyPress;
+					xEvent->type = KeyRelease;
 				 	keyState |= updateState;
 			}
 			else
 			{
-					xEvent->type = KeyRelease;
+					xEvent->type = KeyPress;
 					keyState &= ~updateState;
 			}
 
 				xEvent->xkey.keycode = RAWtoSDL[ (buf[byteToRead]&0x7F) | byteToRead << 7 ];
 				xEvent->xkey.state = keyState;
+				printf("keyboard type %d, keycode %d\n", xEvent->type, xEvent->xkey.keycode);
 				return 1;
 		}
 		else
@@ -658,7 +658,7 @@ int RPI_NextXEvent(XEvent* xEvent)
 		int res;
 		int byteToRead = 0;
 		char buf[] = {0,0,0,0,0};
-		int i;		
+		int i=0;
 
 		xEvent->xkey.keycode = 0;
 
@@ -706,9 +706,9 @@ int RPI_NextXEvent(XEvent* xEvent)
 					case 'z': 	i=11; xEvent->xkey.keycode = SDLK_LCTRL; 		break;	// A button
 					case '\n': 	i=12; xEvent->xkey.keycode = SDLK_RETURN; 		break;	// Start button
 				}
-			}			
+			}
 			if (i > 0)
-			{	
+			{
 				kstates[i] ^= 1;
 				if (kstates[i]) xEvent->type = KeyPress;
 				else xEvent->type = KeyRelease;
