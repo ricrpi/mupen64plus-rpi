@@ -29,7 +29,7 @@
 #include "RSP.h"
 #include "Config.h"
 #include "ticks.h"
-
+#include "OGLDebug.h"
 #include "FrameSkipper.h"
 
 //#define DEBUG_PRINT(...) printf(__VA_ARGS__)
@@ -59,10 +59,11 @@ int     ProgramSwaps = 0;
 int     TotalDrawTime = 0;
 int     TotalTriangles = 0;
 int     TotalDrawCalls = 0;
+
 #define glDrawElements(A,B,C,D) \
-    TotalTriangles += B; TotalDrawCalls++; int t = ticksGetTicks(); glDrawElements(A,B,C,D); TotalDrawTime += (ticksGetTicks() - t);
+    TotalTriangles += B; TotalDrawCalls++; int t = ticksGetTicks(); glDrawElements(A,B,C,D); OPENGL_CHECK_ERRORS; TotalDrawTime += (ticksGetTicks() - t);
 #define glDrawArrays(A,B,C) \
-    TotalTriangles += C; TotalDrawCalls++; int t = ticksGetTicks(); glDrawArrays(A,B,C); TotalDrawTime += (ticksGetTicks() - t);
+    TotalTriangles += C; TotalDrawCalls++; int t = ticksGetTicks(); glDrawArrays(A,B,C); OPENGL_CHECK_ERRORS; TotalDrawTime += (ticksGetTicks() - t);
 
 #endif
 
@@ -112,6 +113,7 @@ int OGL_IsExtSupported( const char *extension )
 		return 0;
 
 	extensions = glGetString(GL_EXTENSIONS);
+	OPENGL_CHECK_ERRORS;
 
     if (!extensions) return 0;
 
@@ -155,14 +157,26 @@ void OGL_InitStates()
     printf("Video: Using OpenGL: %s\n", m_strDeviceStats); //TODO should use core DebugMessage();
 
     glEnable( GL_CULL_FACE );
+	OPENGL_CHECK_ERRORS;
+
     glEnableVertexAttribArray( SC_POSITION );
-    glEnable( GL_DEPTH_TEST );
+	OPENGL_CHECK_ERRORS;
+
+	glEnable( GL_DEPTH_TEST );
+	OPENGL_CHECK_ERRORS;
+
     glDepthFunc( GL_ALWAYS );
+	OPENGL_CHECK_ERRORS;
+
     glDepthMask( GL_FALSE );
+	OPENGL_CHECK_ERRORS;
+
     glEnable( GL_SCISSOR_TEST );
+	OPENGL_CHECK_ERRORS;
 
 ///// paulscode, fixes missing graphics on Qualcomm, Adreno:
     glDepthRangef(0.0f, 1.0f);
+	OPENGL_CHECK_ERRORS;
 /*
     // default values (only seem to work on OMAP!)
     glPolygonOffset(0.2f, 0.2f);
@@ -186,7 +200,7 @@ void OGL_InitStates()
     
 	DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
     glViewport(config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
-
+	OPENGL_CHECK_ERRORS;
     //create default shader program
     LOG( LOG_VERBOSE, "Generate Default Shader Program.\n" );
 
@@ -194,8 +208,13 @@ void OGL_InitStates()
     src[0] = _default_fsh;
     OGL.defaultFragShader = glCreateShader( GL_FRAGMENT_SHADER );
     glShaderSource( OGL.defaultFragShader, 1, (const char**) src, NULL );
+	OPENGL_CHECK_ERRORS;
+
     glCompileShader( OGL.defaultFragShader );
+	OPENGL_CHECK_ERRORS;
+
     glGetShaderiv( OGL.defaultFragShader, GL_COMPILE_STATUS, &success );
+	OPENGL_CHECK_ERRORS;
     if (!success)
     {
         LOG(LOG_ERROR, "Failed to produce default fragment shader.\n");
@@ -203,9 +222,16 @@ void OGL_InitStates()
 
     src[0] = _default_vsh;
     OGL.defaultVertShader = glCreateShader( GL_VERTEX_SHADER );
+	OPENGL_CHECK_ERRORS;
+
     glShaderSource( OGL.defaultVertShader, 1, (const char**) src, NULL );
-    glCompileShader( OGL.defaultVertShader );
+    OPENGL_CHECK_ERRORS;
+
+	glCompileShader( OGL.defaultVertShader );
+	OPENGL_CHECK_ERRORS;
+
     glGetShaderiv( OGL.defaultVertShader, GL_COMPILE_STATUS, &success );
+	OPENGL_CHECK_ERRORS;
     if( !success )
     {
         LOG( LOG_ERROR, "Failed to produce default vertex shader.\n" );
@@ -213,20 +239,34 @@ void OGL_InitStates()
     }
 
     OGL.defaultProgram = glCreateProgram();
-    glBindAttribLocation( OGL.defaultProgram, 0, "aPosition" );
-    glBindAttribLocation( OGL.defaultProgram, 1, "aTexCoord" );
-    glAttachShader( OGL.defaultProgram, OGL.defaultFragShader );
-    glAttachShader( OGL.defaultProgram, OGL.defaultVertShader );
-    glLinkProgram( OGL.defaultProgram );
+	OPENGL_CHECK_ERRORS;
+
+	glBindAttribLocation( OGL.defaultProgram, 0, "aPosition" );
+	OPENGL_CHECK_ERRORS;
+
+	glBindAttribLocation( OGL.defaultProgram, 1, "aTexCoord" );
+	OPENGL_CHECK_ERRORS;
+
+	glAttachShader( OGL.defaultProgram, OGL.defaultFragShader );
+	OPENGL_CHECK_ERRORS;
+
+	glAttachShader( OGL.defaultProgram, OGL.defaultVertShader );
+	OPENGL_CHECK_ERRORS;
+
+	glLinkProgram( OGL.defaultProgram );
+	OPENGL_CHECK_ERRORS;
     glGetProgramiv( OGL.defaultProgram, GL_LINK_STATUS, &success );
+	OPENGL_CHECK_ERRORS;
     if( !success )
     {
         LOG( LOG_ERROR, "Failed to link default program.\n" );
         _glcompiler_error( OGL.defaultFragShader );
     }
     glUniform1i( glGetUniformLocation( OGL.defaultProgram, "uTex" ), 0 );
-    glUseProgram( OGL.defaultProgram );
+	OPENGL_CHECK_ERRORS;
 
+    glUseProgram( OGL.defaultProgram );
+	OPENGL_CHECK_ERRORS;
 }
 
 void OGL_UpdateScale()
@@ -251,6 +291,7 @@ void OGL_ResizeWindow(int x, int y, int width, int height)
 	DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
     glViewport(config.framebuffer.xpos, config.framebuffer.ypos,
             config.framebuffer.width, config.framebuffer.height);
+	OPENGL_CHECK_ERRORS;
 }
 
 ////// paulscode, added for SDL linkage
@@ -338,17 +379,36 @@ bool OGL_Start()
 /////// paulscode, graphics bug-fixes
     float depth = gDP.fillColor.z ;
     glDisable( GL_SCISSOR_TEST );
+	OPENGL_CHECK_ERRORS;
+
     glDepthMask( GL_TRUE );  // fixes side-bar graphics glitches
+	OPENGL_CHECK_ERRORS;
+
 //    glClearDepthf( depth );  // broken on Qualcomm Adreno
+
     glClearDepthf( 1.0f );  // fixes missing graphics on Qualcomm Adreno
+	OPENGL_CHECK_ERRORS;
+
     glClearColor( 0, 0, 0, 1 );
+	OPENGL_CHECK_ERRORS;
+
     glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+	OPENGL_CHECK_ERRORS;
+
     glFinish();
+	OPENGL_CHECK_ERRORS;
+
     Android_JNI_SwapWindow();  // paulscode, fix for black-screen bug
     glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+	OPENGL_CHECK_ERRORS;
+
     glFinish();
+	OPENGL_CHECK_ERRORS;
+
     OGL_UpdateDepthUpdate();
     glEnable( GL_SCISSOR_TEST );
+	OPENGL_CHECK_ERRORS;
+
 ////////
 #endif
 
@@ -362,17 +422,37 @@ bool OGL_Start()
         }
 
         glGenFramebuffers(1, &OGL.framebuffer.fb);
+		OPENGL_CHECK_ERRORS;
+
         glGenRenderbuffers(1, &OGL.framebuffer.depth_buffer);
+		OPENGL_CHECK_ERRORS;
+
         glGenTextures(1, &OGL.framebuffer.color_buffer);
+		OPENGL_CHECK_ERRORS;
+
         glBindRenderbuffer(GL_RENDERBUFFER, OGL.framebuffer.depth_buffer);
+		OPENGL_CHECK_ERRORS;
+
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24_OES, config.framebuffer.width, config.framebuffer.height);
+		OPENGL_CHECK_ERRORS;
+
         glBindTexture(GL_TEXTURE_2D, OGL.framebuffer.color_buffer);
+		OPENGL_CHECK_ERRORS;
+
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, config.framebuffer.width, config.framebuffer.height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
+		OPENGL_CHECK_ERRORS;
+
         glBindFramebuffer(GL_FRAMEBUFFER, OGL.framebuffer.fb);
+		OPENGL_CHECK_ERRORS;
+
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, OGL.framebuffer.color_buffer, 0);
+		OPENGL_CHECK_ERRORS;
+
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, OGL.framebuffer.depth_buffer);
+		OPENGL_CHECK_ERRORS;
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		OPENGL_CHECK_ERRORS;
 
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         {
@@ -400,6 +480,7 @@ bool OGL_Start()
 
     float f = 0;
     glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &f);
+	OPENGL_CHECK_ERRORS;
     if (config.texture.maxAnisotropy > ((int)f))
     {
         LOG(LOG_WARNING, "Clamping max anistropy to %ix.\n", (int)f);
@@ -435,7 +516,6 @@ bool OGL_Start()
     OGL.renderState = RS_NONE;
     gSP.changed = gDP.changed = 0xFFFFFFFF;
     VI.displayNum = 0;
-    glGetError();
 
     return TRUE;
 }
@@ -451,13 +531,21 @@ void OGL_Stop()
     if (config.framebuffer.enable)
     {
         glDeleteFramebuffers(1, &OGL.framebuffer.fb);
+		OPENGL_CHECK_ERRORS;
         glDeleteTextures(1, &OGL.framebuffer.color_buffer);
+		OPENGL_CHECK_ERRORS;
         glDeleteRenderbuffers(1, &OGL.framebuffer.depth_buffer);
+		OPENGL_CHECK_ERRORS;
     }
 
     glDeleteShader(OGL.defaultFragShader);
+	OPENGL_CHECK_ERRORS;
+
     glDeleteShader(OGL.defaultVertShader);
+	OPENGL_CHECK_ERRORS;
+
     glDeleteProgram(OGL.defaultProgram);
+	OPENGL_CHECK_ERRORS;
 
     ShaderCombiner_Destroy();
     TextureCache_Destroy();
@@ -468,15 +556,28 @@ void OGL_UpdateCullFace()
     if (config.enableFaceCulling && (gSP.geometryMode & G_CULL_BOTH))
     {
         glEnable( GL_CULL_FACE );
+		OPENGL_CHECK_ERRORS;
         if ((gSP.geometryMode & G_CULL_BACK) && (gSP.geometryMode & G_CULL_FRONT))
-            glCullFace(GL_FRONT_AND_BACK);
+		{
+            glCullFace(GL_FRONT_AND_BACK);	
+			OPENGL_CHECK_ERRORS;
+		}
         else if (gSP.geometryMode & G_CULL_BACK)
+		{
             glCullFace(GL_BACK);
+			OPENGL_CHECK_ERRORS;
+		}
         else
+		{
             glCullFace(GL_FRONT);
+			OPENGL_CHECK_ERRORS;
+		}
     }
     else
+	{
         glDisable(GL_CULL_FACE);
+		OPENGL_CHECK_ERRORS;
+	}
 }
 
 void OGL_UpdateViewport()
@@ -489,14 +590,21 @@ void OGL_UpdateViewport()
 
 	DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, x, y, w, h);
     glViewport(x, y, w, h);
+	OPENGL_CHECK_ERRORS;
 }
 
 void OGL_UpdateDepthUpdate()
 {
     if (gDP.otherMode.depthUpdate)
-        glDepthMask(GL_TRUE);
+	{
+		glDepthMask(GL_TRUE);
+		OPENGL_CHECK_ERRORS;
+	}
     else
-        glDepthMask(GL_FALSE);
+	{
+	    glDepthMask(GL_FALSE);
+		OPENGL_CHECK_ERRORS;
+	}
 }
 
 void OGL_UpdateScissor()
@@ -507,6 +615,7 @@ void OGL_UpdateScissor()
     w = (int)((gDP.scissor.lrx - gDP.scissor.ulx) * OGL.scaleX);
     h = (int)((gDP.scissor.lry - gDP.scissor.uly) * OGL.scaleY);
     glScissor(x, y, w, h);
+	OPENGL_CHECK_ERRORS;
 }
 
 //copied from RICE VIDEO
@@ -518,20 +627,24 @@ void OGL_SetBlendMode()
     u32 blendmode_2 = blender&0x3333;
 
     glEnable(GL_BLEND);
+	OPENGL_CHECK_ERRORS;
     switch(gDP.otherMode.cycleType)
     {
         case G_CYC_FILL:
             glDisable(GL_BLEND);
+			OPENGL_CHECK_ERRORS;
             break;
 
         case G_CYC_COPY:
             glBlendFunc(GL_ONE, GL_ZERO);
+			OPENGL_CHECK_ERRORS;
             break;
 
         case G_CYC_2CYCLE:
             if (gDP.otherMode.forceBlender && gDP.otherMode.depthCompare)
             {
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				OPENGL_CHECK_ERRORS;
                 break;
             }
 
@@ -549,14 +662,21 @@ void OGL_SetBlendMode()
                 case BLEND_FOG_ASHADE+(BLEND_PASS>>2):
                 case BLEND_FOG_3+(BLEND_PASS>>2):
                     glDisable(GL_BLEND);
+					OPENGL_CHECK_ERRORS;
                     break;
 
                 case BLEND_PASS+(BLEND_OPA>>2):
                     if (gDP.otherMode.cvgXAlpha && gDP.otherMode.alphaCvgSel)
-                        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                    else
+                    {
+						glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+						OPENGL_CHECK_ERRORS;
+                    }
+					else
+					{
                         glDisable(GL_BLEND);
-                    break;
+						OPENGL_CHECK_ERRORS;
+                    }
+					break;
 
                 case BLEND_PASS + (BLEND_XLU>>2):
                 case BLEND_FOG_ASHADE + (BLEND_XLU>>2):
@@ -567,22 +687,31 @@ void OGL_SetBlendMode()
                 case BLEND_XLU + (BLEND_FOG_MEM_IN_MEM>>2):
                 case BLEND_PASS + (BLEND_FOG_MEM_IN_MEM>>2):
                     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+					OPENGL_CHECK_ERRORS;
                     break;
 
                 case BLEND_FOG_ASHADE+0x0301:
                     glBlendFunc(GL_SRC_ALPHA, GL_ZERO);
+					OPENGL_CHECK_ERRORS;
                     break;
 
                 case 0x0c08+0x1111:
                     glBlendFunc(GL_ZERO, GL_DST_ALPHA);
+					OPENGL_CHECK_ERRORS;
                     break;
 
                 default:
                     if (blendmode_2 == (BLEND_PASS>>2))
-                        glDisable(GL_BLEND);
-                    else
+                    {
+						glDisable(GL_BLEND);
+						OPENGL_CHECK_ERRORS;
+                    }
+					else
+					{
                         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                    break;
+						OPENGL_CHECK_ERRORS;
+                    }
+					break;
                 }
                 break;
 
@@ -591,6 +720,7 @@ void OGL_SetBlendMode()
         if (gDP.otherMode.forceBlender && gDP.otherMode.depthCompare && blendmode_1 != BLEND_FOG_ASHADE )
         {
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			OPENGL_CHECK_ERRORS;
             break;
         }
 
@@ -603,10 +733,12 @@ void OGL_SetBlendMode()
             case BLEND_BLENDCOLOR:
             case 0x00c0:
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				OPENGL_CHECK_ERRORS;
                 break;
 
             case BLEND_MEM_ALPHA_IN:
                 glBlendFunc(GL_ZERO, GL_DST_ALPHA);
+				OPENGL_CHECK_ERRORS;
                 break;
 
             case BLEND_OPA:
@@ -616,6 +748,7 @@ void OGL_SetBlendMode()
                 //}
 
                 glDisable(GL_BLEND);
+				OPENGL_CHECK_ERRORS;
                 break;
 
             case BLEND_PASS:
@@ -624,20 +757,24 @@ void OGL_SetBlendMode()
             case BLEND_FOG_MEM_3:
             case BLEND_BI_AFOG:
                 glDisable(GL_BLEND);
+				OPENGL_CHECK_ERRORS;
                 break;
 
             case BLEND_FOG_APRIM:
                 glBlendFunc(GL_ONE_MINUS_SRC_ALPHA, GL_ZERO);
+				OPENGL_CHECK_ERRORS;
                 break;
 
             case BLEND_NOOP3:
             case BLEND_NOOP5:
             case BLEND_MEM:
                 glBlendFunc(GL_ZERO, GL_ONE);
+				OPENGL_CHECK_ERRORS;
                 break;
 
             default:
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				OPENGL_CHECK_ERRORS;
         }
     }
 
@@ -661,10 +798,15 @@ void OGL_UpdateStates()
         OGL_UpdateCullFace();
 
         if (gSP.geometryMode & G_ZBUFFER)
-            glEnable(GL_DEPTH_TEST);
-        else
+        {
+			glEnable(GL_DEPTH_TEST);
+			OPENGL_CHECK_ERRORS;
+        }
+		else
+		{
             glDisable(GL_DEPTH_TEST);
-
+			OPENGL_CHECK_ERRORS;
+		}
     }
 
     if (gDP.changed & CHANGED_CONVERT)
@@ -679,17 +821,29 @@ void OGL_UpdateStates()
         {
             //glDepthFunc((gDP.otherMode.depthCompare) ? GL_GEQUAL : GL_ALWAYS);
             glDepthFunc((gDP.otherMode.depthCompare) ? GL_LESS : GL_ALWAYS);
+			OPENGL_CHECK_ERRORS;
+
             glDepthMask((gDP.otherMode.depthUpdate) ? GL_TRUE : GL_FALSE);
+			OPENGL_CHECK_ERRORS;
 
             if (gDP.otherMode.depthMode == ZMODE_DEC)
-                glEnable(GL_POLYGON_OFFSET_FILL);
-           else
-                glDisable(GL_POLYGON_OFFSET_FILL);
+			{
+				glEnable(GL_POLYGON_OFFSET_FILL);
+				OPENGL_CHECK_ERRORS;
+			}
+			else
+			{
+				glDisable(GL_POLYGON_OFFSET_FILL);
+				OPENGL_CHECK_ERRORS;
+			}
         }
         else
         {
             glDepthFunc(GL_ALWAYS);
-            glDepthMask(GL_FALSE);
+			OPENGL_CHECK_ERRORS;
+
+			glDepthMask(GL_FALSE);
+			OPENGL_CHECK_ERRORS;
         }
     }
 
@@ -778,16 +932,19 @@ void OGL_UpdateStates()
             !(gDP.otherMode.alphaCvgSel))
         {
             glEnable( GL_BLEND );
+			OPENGL_CHECK_ERRORS;
 
             switch (gDP.otherMode.l >> 16)
             {
                 case 0x0448: // Add
                 case 0x055A:
                     glBlendFunc( GL_ONE, GL_ONE );
+					OPENGL_CHECK_ERRORS;
                     break;
                 case 0x0C08: // 1080 Sky
                 case 0x0F0A: // Used LOTS of places
                     glBlendFunc( GL_ONE, GL_ZERO );
+					OPENGL_CHECK_ERRORS;
                     break;
 
                 case 0x0040: // Fzero
@@ -798,28 +955,35 @@ void OGL_UpdateStates()
                 case 0x0050: // Standard interpolated blend
                 case 0x0055: // Used for antialiasing
                     glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+					OPENGL_CHECK_ERRORS;
                     break;
 
                 case 0x0FA5: // Seems to be doing just blend color - maybe combiner can be used for this?
                 case 0x5055: // Used in Paper Mario intro, I'm not sure if this is right...
                     glBlendFunc( GL_ZERO, GL_ONE );
+					OPENGL_CHECK_ERRORS;
                     break;
 
                 default:
                     LOG(LOG_VERBOSE, "Unhandled blend mode=%x", gDP.otherMode.l >> 16);
                     glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+					OPENGL_CHECK_ERRORS;
                     break;
             }
         }
         else
         {
             glDisable( GL_BLEND );
+			OPENGL_CHECK_ERRORS;
         }
 
         if (gDP.otherMode.cycleType == G_CYC_FILL)
         {
             glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+			OPENGL_CHECK_ERRORS;
+
             glEnable( GL_BLEND );
+			OPENGL_CHECK_ERRORS;
         }
 #endif
     }
@@ -843,22 +1007,40 @@ void OGL_AddTriangle(int v0, int v1, int v2)
 void OGL_SetColorArray()
 {
     if (scProgramCurrent->usesCol)
-        glEnableVertexAttribArray(SC_COLOR);
+    {
+	    glEnableVertexAttribArray(SC_COLOR);
+		OPENGL_CHECK_ERRORS;
+	}
     else
+	{
         glDisableVertexAttribArray(SC_COLOR);
+		OPENGL_CHECK_ERRORS;
+	}
 }
 
 void OGL_SetTexCoordArrays()
 {
     if (scProgramCurrent->usesT0)
+	{
         glEnableVertexAttribArray(SC_TEXCOORD0);
-    else
+		OPENGL_CHECK_ERRORS;
+    }
+	else
+	{
         glDisableVertexAttribArray(SC_TEXCOORD0);
+		OPENGL_CHECK_ERRORS;
+	}
 
     if (scProgramCurrent->usesT1)
+	{
         glEnableVertexAttribArray(SC_TEXCOORD1);
-    else
+		OPENGL_CHECK_ERRORS;
+    }
+	else
+	{
         glDisableVertexAttribArray(SC_TEXCOORD1);
+		OPENGL_CHECK_ERRORS;
+	}
 }
 
 void OGL_DrawTriangles()
@@ -882,6 +1064,7 @@ void OGL_DrawTriangles()
         OGL_SetColorArray();
         OGL_SetTexCoordArrays();
         glDisableVertexAttribArray(SC_TEXCOORD1);
+		OPENGL_CHECK_ERRORS;
         SC_ForceUniform1f(uRenderState, RS_TRIANGLE);
     }
 
@@ -891,12 +1074,20 @@ void OGL_DrawTriangles()
         StateChanges++;
 #endif
         glVertexAttribPointer(SC_POSITION, 4, GL_FLOAT, GL_FALSE, sizeof(SPVertex), &OGL.triangles.vertices[0].x);
+		OPENGL_CHECK_ERRORS;
+
         glVertexAttribPointer(SC_COLOR, 4, GL_FLOAT, GL_FALSE, sizeof(SPVertex), &OGL.triangles.vertices[0].r);
+		OPENGL_CHECK_ERRORS;
+
         glVertexAttribPointer(SC_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, sizeof(SPVertex), &OGL.triangles.vertices[0].s);
+		OPENGL_CHECK_ERRORS;
 
         OGL_UpdateCullFace();
         OGL_UpdateViewport();
-        glEnable(GL_SCISSOR_TEST);
+ 
+       	glEnable(GL_SCISSOR_TEST);
+		OPENGL_CHECK_ERRORS;
+
         OGL.renderState = RS_TRIANGLE;
     }
 
@@ -925,9 +1116,13 @@ void OGL_DrawLine(int v0, int v1, float width )
 #endif
         OGL_SetColorArray();
         glDisableVertexAttribArray(SC_TEXCOORD0);
+		OPENGL_CHECK_ERRORS;
         glDisableVertexAttribArray(SC_TEXCOORD1);
+		OPENGL_CHECK_ERRORS;
         glVertexAttribPointer(SC_POSITION, 4, GL_FLOAT, GL_FALSE, sizeof(SPVertex), &OGL.triangles.vertices[0].x);
+		OPENGL_CHECK_ERRORS;
         glVertexAttribPointer(SC_COLOR, 4, GL_FLOAT, GL_FALSE, sizeof(SPVertex), &OGL.triangles.vertices[0].r);
+		OPENGL_CHECK_ERRORS;
 
         SC_ForceUniform1f(uRenderState, RS_LINE);
         OGL_UpdateCullFace();
@@ -939,6 +1134,7 @@ void OGL_DrawLine(int v0, int v1, float width )
     elem[0] = v0;
     elem[1] = v1;
     glLineWidth( width * OGL.scaleX );
+	OPENGL_CHECK_ERRORS;
     glDrawElements(GL_LINES, 2, GL_UNSIGNED_SHORT, elem);
 }
 
@@ -955,8 +1151,14 @@ void OGL_DrawRect( int ulx, int uly, int lrx, int lry, float *color)
     if (OGL.renderState != RS_RECT || scProgramChanged)
     {
         glDisableVertexAttribArray(SC_COLOR);
+		OPENGL_CHECK_ERRORS;
+
         glDisableVertexAttribArray(SC_TEXCOORD0);
+		OPENGL_CHECK_ERRORS;
+
         glDisableVertexAttribArray(SC_TEXCOORD1);
+		OPENGL_CHECK_ERRORS;
+
         SC_ForceUniform1f(uRenderState, RS_RECT);
     }
 
@@ -966,14 +1168,23 @@ void OGL_DrawRect( int ulx, int uly, int lrx, int lry, float *color)
         StateChanges++;
 #endif
         glVertexAttrib4f(SC_POSITION, 0, 0, gSP.viewport.nearz, 1.0);
+		OPENGL_CHECK_ERRORS;
+
         glVertexAttribPointer(SC_POSITION, 2, GL_FLOAT, GL_FALSE, sizeof(GLVertex), &OGL.rect[0].x);
+		OPENGL_CHECK_ERRORS;
+
         OGL.renderState = RS_RECT;
     }
 
 	DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
     glViewport(config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height );
+	OPENGL_CHECK_ERRORS;
+
     glDisable(GL_SCISSOR_TEST);
+	OPENGL_CHECK_ERRORS;
+
     glDisable(GL_CULL_FACE);
+	OPENGL_CHECK_ERRORS;
 
     OGL.rect[0].x = (float) ulx * (2.0f * VI.rwidth) - 1.0;
     OGL.rect[0].y = (float) uly * (-2.0f * VI.rheight) + 1.0;
@@ -985,8 +1196,13 @@ void OGL_DrawRect( int ulx, int uly, int lrx, int lry, float *color)
     OGL.rect[3].y = OGL.rect[2].y;
 
     glVertexAttrib4fv(SC_COLOR, color);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glEnable(GL_SCISSOR_TEST);
+	OPENGL_CHECK_ERRORS;
+
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+	glEnable(GL_SCISSOR_TEST);
+	OPENGL_CHECK_ERRORS;
+
     OGL_UpdateViewport();
 
 }
@@ -1014,6 +1230,8 @@ void OGL_DrawTexturedRect( float ulx, float uly, float lrx, float lry, float uls
     if (OGL.renderState != RS_TEXTUREDRECT || scProgramChanged)
     {
         glDisableVertexAttribArray(SC_COLOR);
+		OPENGL_CHECK_ERRORS;
+
         OGL_SetTexCoordArrays();
         SC_ForceUniform1f(uRenderState, RS_TEXTUREDRECT);
     }
@@ -1024,16 +1242,29 @@ void OGL_DrawTexturedRect( float ulx, float uly, float lrx, float lry, float uls
         StateChanges++;
 #endif
         glVertexAttrib4f(SC_COLOR, 0, 0, 0, 0);
+		OPENGL_CHECK_ERRORS;
+
         glVertexAttrib4f(SC_POSITION, 0, 0, (gDP.otherMode.depthSource == G_ZS_PRIM) ? gDP.primDepth.z : gSP.viewport.nearz, 1.0);
+		OPENGL_CHECK_ERRORS;
+
         glVertexAttribPointer(SC_POSITION, 2, GL_FLOAT, GL_FALSE, sizeof(GLVertex), &OGL.rect[0].x);
+		OPENGL_CHECK_ERRORS;
+
         glVertexAttribPointer(SC_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, sizeof(GLVertex), &OGL.rect[0].s0);
+		OPENGL_CHECK_ERRORS;
+
         glVertexAttribPointer(SC_TEXCOORD1, 2, GL_FLOAT, GL_FALSE, sizeof(GLVertex), &OGL.rect[0].s1);
+		OPENGL_CHECK_ERRORS;
+
         OGL.renderState = RS_TEXTUREDRECT;
     }
 
 	DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
     glViewport(config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
+	OPENGL_CHECK_ERRORS;
+
     glDisable(GL_CULL_FACE);
+	OPENGL_CHECK_ERRORS;
 
     OGL.rect[0].x = (float) ulx * (2.0f * VI.rwidth) - 1.0f;
     OGL.rect[0].y = (float) uly * (-2.0f * VI.rheight) + 1.0f;
@@ -1064,11 +1295,18 @@ void OGL_DrawTexturedRect( float ulx, float uly, float lrx, float lry, float uls
         }
 
         glActiveTexture( GL_TEXTURE0);
+		OPENGL_CHECK_ERRORS;
         if ((OGL.rect[0].s0 >= 0.0f) && (OGL.rect[3].s0 <= cache.current[0]->width))
+		{
             glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+			OPENGL_CHECK_ERRORS;
+		}
 
         if ((OGL.rect[0].t0 >= 0.0f) && (OGL.rect[3].t0 <= cache.current[0]->height))
+		{
             glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+			OPENGL_CHECK_ERRORS;
+		}
 
         OGL.rect[0].s0 *= cache.current[0]->scaleS;
         OGL.rect[0].t0 *= cache.current[0]->scaleT;
@@ -1096,11 +1334,17 @@ void OGL_DrawTexturedRect( float ulx, float uly, float lrx, float lry, float uls
         }
 
         glActiveTexture( GL_TEXTURE1);
-        if ((OGL.rect[0].s1 == 0.0f) && (OGL.rect[3].s1 <= cache.current[1]->width))
-            glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+		OPENGL_CHECK_ERRORS;
 
-        if ((OGL.rect[0].t1 == 0.0f) && (OGL.rect[3].t1 <= cache.current[1]->height))
+        if ((OGL.rect[0].s1 == 0.0f) && (OGL.rect[3].s1 <= cache.current[1]->width)){
+            glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+			OPENGL_CHECK_ERRORS;
+		}
+
+        if ((OGL.rect[0].t1 == 0.0f) && (OGL.rect[3].t1 <= cache.current[1]->height)){
             glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+			OPENGL_CHECK_ERRORS;
+		}
 
         OGL.rect[0].s1 *= cache.current[1]->scaleS;
         OGL.rect[0].t1 *= cache.current[1]->scaleT;
@@ -1111,8 +1355,13 @@ void OGL_DrawTexturedRect( float ulx, float uly, float lrx, float lry, float uls
     if ((gDP.otherMode.cycleType == G_CYC_COPY) && !config.texture.forceBilinear)
     {
         glActiveTexture(GL_TEXTURE0);
+		OPENGL_CHECK_ERRORS;
+
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+		OPENGL_CHECK_ERRORS;
+
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+		OPENGL_CHECK_ERRORS;
     }
 
     if (flip)
@@ -1154,13 +1403,26 @@ void OGL_ClearDepthBuffer()
 
 /////// paulscode, graphics bug-fixes
     glDisable( GL_SCISSOR_TEST );
+	OPENGL_CHECK_ERRORS;
+
     glDepthMask( GL_TRUE );  // fixes side-bar graphics glitches
+	OPENGL_CHECK_ERRORS;
+
 //    glClearDepthf( depth );  // broken on Qualcomm Adreno
+
     glClearDepthf( 1.0f );  // fixes missing graphics on Qualcomm Adreno
+	OPENGL_CHECK_ERRORS;
+
     glClearColor( 0, 0, 0, 1 );
+	OPENGL_CHECK_ERRORS;
+
     glClear( GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT );
+	OPENGL_CHECK_ERRORS;
+
     OGL_UpdateDepthUpdate();
     glEnable( GL_SCISSOR_TEST );
+	OPENGL_CHECK_ERRORS;
+
 ////////
 }
 
@@ -1172,8 +1434,14 @@ void OGL_ClearColorBuffer( float *color )
         OGL_SwapBuffers();
 
     glScissor(config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
+	OPENGL_CHECK_ERRORS;
+
     glClearColor( color[0], color[1], color[2], color[3] );
+	OPENGL_CHECK_ERRORS;
+
     glClear( GL_COLOR_BUFFER_BIT );
+	OPENGL_CHECK_ERRORS;
+
     OGL_UpdateScissor();
 
 }
@@ -1270,15 +1538,26 @@ void OGL_SwapBuffers()
     if (config.framebuffer.enable)
     {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		OPENGL_CHECK_ERRORS;
+
         glClearColor( 0, 0, 0, 1 );
+		OPENGL_CHECK_ERRORS;
+
         glClear( GL_COLOR_BUFFER_BIT );
+		OPENGL_CHECK_ERRORS;
 
         glUseProgram(OGL.defaultProgram);
+		OPENGL_CHECK_ERRORS;
+
         glDisable(GL_SCISSOR_TEST);
+		OPENGL_CHECK_ERRORS;
+
         glDisable(GL_DEPTH_TEST);
+		OPENGL_CHECK_ERRORS;
 
 		DEBUG_PRINT("Video: OpenGL.cpp:%d glViewport(%d,%d,%d,%d)\n", __LINE__, config.window.xpos, config.window.ypos, config.window.width, config.window.height);
         glViewport(config.window.xpos, config.window.ypos, config.window.width, config.window.height);
+		OPENGL_CHECK_ERRORS;
 
         static const float vert[] =
         {
@@ -1289,28 +1568,48 @@ void OGL_SwapBuffers()
         };
 
         glActiveTexture(GL_TEXTURE0);
+		OPENGL_CHECK_ERRORS;
+
         glBindTexture(GL_TEXTURE_2D, OGL.framebuffer.color_buffer);
+		OPENGL_CHECK_ERRORS;
+
         if (config.framebuffer.bilinear)
         {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			OPENGL_CHECK_ERRORS;
+
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			OPENGL_CHECK_ERRORS;
         }
         else
         {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			OPENGL_CHECK_ERRORS;
+
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			OPENGL_CHECK_ERRORS;
         }
 
         glEnableVertexAttribArray(0);
+		OPENGL_CHECK_ERRORS;
+
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (float*)vert);
+		OPENGL_CHECK_ERRORS;
+
         glEnableVertexAttribArray(1);
+		OPENGL_CHECK_ERRORS;
+
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (float*)vert + 2);
+		OPENGL_CHECK_ERRORS;
+
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+		OPENGL_CHECK_ERRORS;
 
 		if (CoreVideo_GL_SwapBuffers) CoreVideo_GL_SwapBuffers();
-        //Android_JNI_SwapWindow(); // paulscode, fix for black-screen bug
 
         glBindFramebuffer(GL_FRAMEBUFFER, OGL.framebuffer.fb);
+		OPENGL_CHECK_ERRORS;
+
         OGL_UpdateViewport();
         if (scProgramCurrent) glUseProgram(scProgramCurrent->program);
         OGL.renderState = RS_NONE;
@@ -1318,7 +1617,6 @@ void OGL_SwapBuffers()
     else
     {
 		if (CoreVideo_GL_SwapBuffers) CoreVideo_GL_SwapBuffers();
-       	// Android_JNI_SwapWindow(); // paulscode, fix for black-screen bug
     }
 
     // if emulator defined a render callback function, call it before
@@ -1332,13 +1630,26 @@ void OGL_SwapBuffers()
 /////// paulscode, graphics bug-fixes
    // float depth = gDP.fillColor.z ;
     glDisable( GL_SCISSOR_TEST );
+	OPENGL_CHECK_ERRORS;
+
     glDepthMask( GL_TRUE );  // fixes side-bar graphics glitches
+	OPENGL_CHECK_ERRORS;
+
 //    glClearDepthf( depth );  // broken on Qualcomm Adreno
+
     glClearDepthf( 1.0f );  // fixes missing graphics on Qualcomm Adreno
+	OPENGL_CHECK_ERRORS;
+
     glClearColor( 0, 0, 0, 1 );
+	OPENGL_CHECK_ERRORS;
+
     glClear( GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT );
+	OPENGL_CHECK_ERRORS;
+
     OGL_UpdateDepthUpdate();
     glEnable( GL_SCISSOR_TEST );
+	OPENGL_CHECK_ERRORS;
+
 ///////
     }
 
@@ -1354,8 +1665,7 @@ void OGL_ReadScreen( void *dest, int *width, int *height )
     if (dest == NULL)
         return;
 
-    glReadPixels( config.framebuffer.xpos, config.framebuffer.ypos,
-            config.framebuffer.width, config.framebuffer.height,
-            GL_RGBA, GL_UNSIGNED_BYTE, dest );
+    glReadPixels( config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height, GL_RGBA, GL_UNSIGNED_BYTE, dest );
+	OPENGL_CHECK_ERRORS;
 }
 
