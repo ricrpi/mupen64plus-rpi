@@ -82,7 +82,7 @@ extern uint32_t SDL_GetTicks(void);
 #define CTTW_SLEEP_TIME 10
 #define MIN_LATENCY_TIME 10
 
-#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+//#define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT(...)
