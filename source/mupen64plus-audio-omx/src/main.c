@@ -171,6 +171,8 @@ static void InitializeAudio(int freq);
 static void ReadConfig(void);
 static uint32_t SendBufferToAudio();
 static void VolumeCommit(void);
+static uint32_t audioplay_get_latency();
+
 
 //---------------------------------------------------------------
 
@@ -308,7 +310,7 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle, void *Con
 	ConfigSetDefaultInt(l_ConfigAudio, 	"VOLUME_ADJUST",        5,                     		"Percentage change each time the volume is increased or decreased");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"VOLUME_DEFAULT",       80,                    		"Default volume when a game is started");
 	//ConfigSetDefaultInt(l_ConfigAudio,	"DEFAULT_NUM_BUFFERS",	DEFAULT_NUM_BUFFERS,		"The number of Audio buffers to use");
-	ConfigSetDefaultInt(l_ConfigAudio,	"UNDERRUN_MODE",		uiUnderrunMode,				"Underrun Mode, 0 = Nothing, 1 = scale frequency, 2 = repeat block" );
+	ConfigSetDefaultInt(l_ConfigAudio,	"UNDERRUN_MODE",		uiUnderrunMode,				"Underrun Mode, 0 = Nothing, 1 = scale frequency, 2 = repeat block, 3 = passthrough (Forces ROM Frequency)");
 
 	if (bSaveConfig && ConfigAPIVersion >= 0x020100)
 		ConfigSaveSection("Audio-OMX");
@@ -636,7 +638,7 @@ static int32_t audioplay_set_dest(const char *name)
 }
 
 /* Get the latency in ms for audio */
-uint32_t audioplay_get_latency()
+static uint32_t audioplay_get_latency()
 {
 	OMX_PARAM_U32TYPE param;
 	OMX_ERRORTYPE error;
@@ -654,7 +656,7 @@ uint32_t audioplay_get_latency()
 #else
 	DEBUG_PRINT("audio latency %dms\n", param.nU32 * 1000 / OutputFreq);
 #endif
-	
+
 	return param.nU32 * 1000 / OutputFreq;
 }
 
@@ -734,11 +736,36 @@ EXPORT void CALL AiLenChanged( void )
 		newsamplerate = OutputFreq * i / (speed_factor);
 	}
 
-	
+
 
 	uiAudioBytes = (uint32_t)(*AudioInfo.AI_LEN_REG);
 
 	p = (int32_t*)(AudioInfo.RDRAM + (*AudioInfo.AI_DRAM_ADDR_REG & 0xFFFFFF));
+
+
+	if (uiUnderrunMode == 3)
+	{
+		static uint32_t b=0, uiUnderRunCount = 0;
+		uint32_t latency = audioplay_get_latency();
+
+		if(latency > uiLatency)
+		{
+			DebugMessage(M64MSG_VERBOSE, "Waiting %dms ", latency - uiLatency);
+			usleep((latency - uiLatency) * 1000 );
+		}
+		else if (latency == 0)
+		{
+			DebugMessage(M64MSG_WARNING, "Audio Buffer under run(%d)", uiUnderRunCount);
+			uiUnderRunCount++;
+		}
+
+		audioBuffers[b]->pBuffer = (void*)p;
+		audioBuffers[b]->nFilledLen = uiAudioBytes;
+		OMX_EmptyThisBuffer(OMX_Handle, audioBuffers[b++]);
+		if (b >= uiNumBuffers) b = 0;
+
+		return;
+	}
 
 	// ------------------------------- Copy music into audio buffer -----------------------------
 
@@ -930,6 +957,8 @@ static void InitializeAudio(int freq)
 		}
 		break;
 	}
+	
+	if (uiUnderrunMode == 3) OutputFreq = freq;
 
 	if (audioBuffers)
 	{
