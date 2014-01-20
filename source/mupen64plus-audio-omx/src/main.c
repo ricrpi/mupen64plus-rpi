@@ -46,11 +46,7 @@
 
 extern uint32_t SDL_GetTicks(void);
 
-/* Size of secondary buffer, in output samples. This is the requested size of SDL's
-   hardware buffer, and the size of the mix buffer for doing SDL volume control. The
-   SDL documentation states that this should be a power of two between 512 and 8192.
-   2048 represents 11.6ms of data at 44kHz with 32bit sample lengths*/
-#define SECONDARY_BUFFER_SIZE 2048
+#define DEFAULT_BUFFER_SIZE 2048
 
 /* This sets default frequency what is used if rom doesn't want to change it.
    Probably only game that needs this is Zelda: Ocarina Of Time Master Quest
@@ -76,10 +72,6 @@ extern uint32_t SDL_GetTicks(void);
 /* Number of buffers used by Audio*/
 #define DEFAULT_NUM_BUFFERS 3
 
-#define SAMPLE_SIZE_BITS 	16
-#define NUM_CHANNELS		2
-
-#define CTTW_SLEEP_TIME 10
 #define MIN_LATENCY_TIME 10
 
 //#define DEBUG_PRINT(...) printf(__VA_ARGS__)
@@ -88,7 +80,9 @@ extern uint32_t SDL_GetTicks(void);
 #define DEBUG_PRINT(...)
 #endif
 
-#define OUT_CHANNELS(num_channels) ((num_channels) > 4 ? 8: (num_channels) > 2 ? 4: (num_channels))
+#define PORT_INDEX 100
+
+//#define MONITOR_BUFFER_READY
 
 //---------------------------------------------------------------
 
@@ -110,39 +104,30 @@ static AUDIO_INFO AudioInfo;
 static int GameFreq = DEFAULT_FREQUENCY;
 
 /* SpeedFactor is used to increase/decrease game playback speed */
-static unsigned int speed_factor = 100;
+static uint32_t speed_factor = 100;
 
 // If this is true then left and right channels are swapped */
-static unsigned int bSwapChannels = 0;
+static uint32_t bSwapChannels = 0;
 
 // This is the frequency mode or Target Output Frequency
-static unsigned int uiOutputFrequencyMode = DEFAULT_MODE;
+static uint32_t uiOutputFrequencyMode = DEFAULT_MODE;
 
 // Size of Secondary audio buffer in output samples
-static unsigned int uiSecondaryBufferSamples = SECONDARY_BUFFER_SIZE;
+static uint32_t uiSecondaryBufferSamples = DEFAULT_BUFFER_SIZE;
 
-static unsigned int uiOutputPort = OUTPUT_PORT;
+static uint32_t uiOutputPort = OUTPUT_PORT;
 
-static unsigned int OutputFreq = 44100;
+static uint32_t OutputFreq = 44100;
 
-static unsigned int uiLatency = DEFAULT_LATENCY;
+static uint32_t uiLatency = DEFAULT_LATENCY;
 
-static unsigned int uiNumBuffers = DEFAULT_NUM_BUFFERS;
+static uint32_t uiNumBuffers = DEFAULT_NUM_BUFFERS;
 
-static unsigned int uiUnderrunMode = 0;
+static uint32_t	bNative = 1;
 
-static uint32_t 	critical_failure = 0;
+static uint32_t uiUnderrunMode = 0;
 
-//---------------------------------------------------------------
-// volume to scale the audio by, range of 0..100
-// if muted, this holds the volume when not muted
-static unsigned int VolPercent = 80;
-
-// how much percent to increment/decrement volume by
-static unsigned int VolDelta = 5;
-
-// Muted or not
-static uint32_t		VolIsMuted = 0;
+static uint32_t critical_failure = 0;
 
 //---------------------------------------------------------------
 // OMX buffers and pointers to speed up copying of audio data
@@ -152,17 +137,13 @@ static uint32_t 	uiBufferIndex = 0;
 static uint32_t*	pNextAudioSample;
 static uint32_t 	uiCurrentBufferLength = 0;
 
-
-#define PORT_INDEX 100
-
-//#define MONITOR_BUFFER_READY
-
 static pthread_mutex_t 	audioLock;
+static pthread_cond_t omxStateCond;
 static OMX_STATETYPE omxState = 0;
+
 #ifdef MONITOR_BUFFER_READY
 static uint32_t buffersReady = 0;
 #endif
-pthread_cond_t omxStateCond;
 
 //---------------------------------------------------------------
 
@@ -170,9 +151,7 @@ pthread_cond_t omxStateCond;
 static void InitializeAudio(int freq);
 static void ReadConfig(void);
 static uint32_t SendBufferToAudio();
-static void VolumeCommit(void);
 static uint32_t audioplay_get_latency();
-
 
 //---------------------------------------------------------------
 
@@ -303,14 +282,12 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle, void *Con
 	ConfigSetDefaultFloat(l_ConfigAudio,"Version",             	CONFIG_PARAM_VERSION,  		"Mupen64Plus OMX Audio Plugin config parameter version number");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"DEFAULT_FREQUENCY",    DEFAULT_FREQUENCY,     		"Frequency which is used if rom doesn't want to change it");
 	ConfigSetDefaultBool(l_ConfigAudio, "SWAP_CHANNELS",        0,                     		"Swaps left and right channels");
-	ConfigSetDefaultInt(l_ConfigAudio, 	"SECONDARY_BUFFER_SIZE",SECONDARY_BUFFER_SIZE, 		"Number of output samples per Audio callback. This is for hardware buffers.");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"OUTPUT_PORT",   		OUTPUT_PORT,   				"Audio output to go to (0) Analogue jack, (1) HDMI");
-	ConfigSetDefaultInt(l_ConfigAudio, "DEFAULT_MODE",     	    DEFAULT_MODE,          "Audio Output Frequncy mode: 0 = Rom Frequency, 1 ROM Frequency if supported (HDMI only), 2 = Standard frequency < Rom Frequency, 3 = Standard frequency > Rom Frequency, [N] Force output frequency");
+	ConfigSetDefaultBool(l_ConfigAudio, "NATIVE_MODE",       	bNative,                    "Point OMX to the raw N64 audio data region instead of copying audio into buffer. Overrides SECONDARY_BUFFER_SIZE, DEFAULT_MODE and LATENCY");
+	ConfigSetDefaultInt(l_ConfigAudio, 	"BUFFER_SIZE",DEFAULT_BUFFER_SIZE, 		"Number of output samples per Audio callback. This is for hardware buffers.");
+	ConfigSetDefaultInt(l_ConfigAudio, 	"DEFAULT_MODE",     	DEFAULT_MODE,          		"Audio Output Frequncy mode: 0 = Rom Frequency, 1 ROM Frequency if supported (HDMI only), 2 = Standard frequency < Rom Frequency, 3 = Standard frequency > Rom Frequency, [N] Force output frequency");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"LATENCY",      		DEFAULT_LATENCY,           	"Desired Latency in ms");
-	ConfigSetDefaultInt(l_ConfigAudio, 	"VOLUME_ADJUST",        5,                     		"Percentage change each time the volume is increased or decreased");
-	ConfigSetDefaultInt(l_ConfigAudio, 	"VOLUME_DEFAULT",       80,                    		"Default volume when a game is started");
-	//ConfigSetDefaultInt(l_ConfigAudio,	"DEFAULT_NUM_BUFFERS",	DEFAULT_NUM_BUFFERS,		"The number of Audio buffers to use");
-	ConfigSetDefaultInt(l_ConfigAudio,	"UNDERRUN_MODE",		uiUnderrunMode,				"Underrun Mode, 0 = Nothing, 1 = scale frequency, 2 = repeat block, 3 = passthrough (Forces ROM Frequency)");
+	ConfigSetDefaultInt(l_ConfigAudio,	"UNDERRUN_MODE",		uiUnderrunMode,				"Underrun Mode, 0 = Ignore, 1 = Report, 2 = repeat audio when latency < LATENCY/2");
 
 	if (bSaveConfig && ConfigAPIVersion >= 0x020100)
 		ConfigSaveSection("Audio-OMX");
@@ -388,7 +365,7 @@ OMX_ERRORTYPE EventHandler(
         OMX_IN OMX_PTR pEventData)
 {
 	pthread_mutex_lock(&audioLock);
-	
+
 	if (eEvent == OMX_EventCmdComplete && nData1 == OMX_CommandStateSet)
 	{
 		omxState = nData2;
@@ -403,9 +380,7 @@ OMX_ERRORTYPE EmptyBufferDone(
         OMX_IN OMX_HANDLETYPE hComponent,
         OMX_IN OMX_PTR pAppData,
         OMX_IN OMX_BUFFERHEADERTYPE* pBuffer)
-{	
-	//static uint32_t uiBufferIndex = 0;
-
+{
 	#ifdef MONITOR_BUFFER_READY
 	pthread_mutex_lock(&audioLock);
 	buffersReady--;
@@ -426,23 +401,15 @@ uint32_t audio_wait_for_state(OMX_U32 state)
 	return 0;
 }
 
-static int32_t audioplay_create(uint32_t num_channels,
-		uint32_t bit_depth,
-		uint32_t num_buffers,
+static int32_t audioplay_create(uint32_t num_buffers,
 		uint32_t buffer_size)
 {
-	uint32_t bytes_per_sample = (bit_depth * OUT_CHANNELS(num_channels)) >> 3;
+	uint32_t bytes_per_sample = 4;
 	OMX_ERRORTYPE error;
 
 	// basic sanity check on arguments
-	if(!(num_channels >= 1 && num_channels <= 8) 
-		|| !(bit_depth == 16 || bit_depth == 32)
-		||	!num_buffers 
-		||	buffer_size < bytes_per_sample)
-	{
-		return -1;
-	}
-	
+	if(!num_buffers ||	buffer_size < bytes_per_sample)	return -1;
+
 	OMX_PARAM_PORTDEFINITIONTYPE param;
 	OMX_AUDIO_PARAM_PCMMODETYPE pcm;
 	OMX_STATETYPE state;
@@ -451,7 +418,7 @@ static int32_t audioplay_create(uint32_t num_channels,
 	OMX_CALLBACKTYPE callbacks;
 	callbacks.EventHandler = EventHandler;
 	callbacks.EmptyBufferDone = EmptyBufferDone;
-	
+
 	error = OMX_GetHandle(&OMX_Handle, "OMX.broadcom.audio_render", NULL, &callbacks);
 	if(error != OMX_ErrorNone){
 		DebugMessage(M64MSG_ERROR, "%d OMX_GetHandle() failed. Error 0x%X", __LINE__, error);
@@ -467,7 +434,6 @@ static int32_t audioplay_create(uint32_t num_channels,
 	param.nBufferCountActual = num_buffers;
 	param.format.audio.eEncoding = OMX_AUDIO_CodingPCM;
 
-
 	error = OMX_SetParameter(OMX_Handle, OMX_IndexParamPortDefinition, &param);
 	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: Failed to set OMX_IndexParamPortDefinition",__LINE__);
 
@@ -477,12 +443,12 @@ static int32_t audioplay_create(uint32_t num_channels,
 	pcm.nVersion.nVersion = OMX_VERSION;
 
 	pcm.nPortIndex = PORT_INDEX;
-	pcm.nChannels = OUT_CHANNELS(num_channels);
+	pcm.nChannels = 2;
 	pcm.eNumData = OMX_NumericalDataSigned;
 	pcm.eEndian = OMX_EndianLittle;
 	pcm.nSamplingRate = OutputFreq;
 	pcm.bInterleaved = OMX_TRUE;
-	pcm.nBitPerSample = bit_depth;
+	pcm.nBitPerSample = 16;
 	pcm.ePCMMode = OMX_AUDIO_PCMModeLinear;
 
 	if(bSwapChannels == 0)
@@ -500,7 +466,7 @@ static int32_t audioplay_create(uint32_t num_channels,
 	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: Failed to Set OMX Parameters. Error 0x%X",__LINE__, error);
 
 	error = OMX_SendCommand(OMX_Handle, OMX_CommandPortDisable, PORT_INDEX, NULL);
-	
+
 	int nPorts;
     int startPortNumber;
     int n;
@@ -519,7 +485,7 @@ static int32_t audioplay_create(uint32_t num_channels,
 	{
 		startPortNumber = ((OMX_PORT_PARAM_TYPE)param2).nStartPortNumber;
 		nPorts = ((OMX_PORT_PARAM_TYPE)param2).nPorts;
-		if (nPorts > 0) 
+		if (nPorts > 0)
 		{
 			for (n = 0; n < nPorts; n++) {
 				error = OMX_SendCommand(OMX_Handle, OMX_CommandPortDisable, n + startPortNumber, NULL);
@@ -533,7 +499,7 @@ static int32_t audioplay_create(uint32_t num_channels,
 	//We can now go to IdleState
 	error = OMX_SendCommand(OMX_Handle, OMX_CommandStateSet, OMX_StateIdle, NULL);
 	if(error != OMX_ErrorNone)
-	{ 	
+	{
 		DebugMessage(M64MSG_ERROR, "line %d: OMX_SendCommand() Failed. Error 0x%X",__LINE__, error);
 		critical_failure = 1;
 		return -1;
@@ -550,7 +516,7 @@ static int32_t audioplay_create(uint32_t num_channels,
 	}
 
 	DebugMessage(M64MSG_VERBOSE, "Creating %d Buffers", num_buffers);
-	
+
 	// Now enable the port ready for setting up buffers
 	error = OMX_SendCommand(OMX_Handle, OMX_CommandPortEnable, PORT_INDEX, NULL);
 	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: OMX_SendCommand() Failed. Error 0x%X", __LINE__, error);
@@ -569,17 +535,17 @@ static int32_t audioplay_create(uint32_t num_channels,
 			return -1;
 		}
 	}
-	
+
 	uiCurrentBufferLength = 0;
 	uiBufferIndex = 0;
 	pNextAudioSample = (uint32_t*)(audioBuffers[uiBufferIndex]->pBuffer);
-	
+
 	error = OMX_SendCommand(OMX_Handle, OMX_CommandPortEnable, 100, NULL);
 	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: OMX_CommandPortEnable Failed",__LINE__);
 
 	error = OMX_SendCommand(OMX_Handle, OMX_CommandStateSet, OMX_StateExecuting, NULL);
 	if(error != OMX_ErrorNone)
-	{ 
+	{
 		DebugMessage(M64MSG_ERROR, "line %d: OMX_StateExecuting Failed",__LINE__);
 		critical_failure = 1;
 		return -1;
@@ -592,8 +558,8 @@ static int32_t audioplay_create(uint32_t num_channels,
 	{
 		memset(audioBuffers[i]->pBuffer, 0, buffer_size);
 		audioBuffers[i]->nOffset = 0;
-    	audioBuffers[i]->nFilledLen = (uiSecondaryBufferSamples * SAMPLE_SIZE_BITS * NUM_CHANNELS)>>3;
-		
+    	audioBuffers[i]->nFilledLen = (uiSecondaryBufferSamples * 4);
+
 		error = OMX_EmptyThisBuffer(OMX_Handle, audioBuffers[i]);
 		if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "line %d: OMX_EmptyThisBuffer Failed",__LINE__);
 	}
@@ -669,23 +635,27 @@ static uint32_t SendBufferToAudio()
 
 	// try and wait for a minimum latency time (in ms) before
 	// sending the next packet
-	latency = audioplay_get_latency();
 
-	if(latency > uiLatency)
-	{
-		DebugMessage(M64MSG_VERBOSE, "Waiting %dms ", latency - uiLatency);
-		usleep((latency - uiLatency) * 1000 );
-	}
-	else if (latency == 0)
-	{
-		DebugMessage(M64MSG_WARNING, "Audio Buffer under run(%d)", uiUnderRunCount);
-		uiUnderRunCount++;
+	if (uiUnderrunMode)
+	{	
+		latency = audioplay_get_latency();
+
+		if(latency > uiLatency)
+		{
+			DebugMessage(M64MSG_VERBOSE, "Waiting %dms ", latency - uiLatency);
+			usleep((latency - uiLatency) * 1000 );
+		}
+		else if (latency == 0)
+		{
+			DebugMessage(M64MSG_WARNING, "Audio Buffer under run(%d)", uiUnderRunCount);
+			uiUnderRunCount++;
+		}
 	}
 
 	DEBUG_PRINT("audioplay_play_buffer()\n");
 	
 	audioBuffers[uiBufferIndex]->nOffset = 0;
-    audioBuffers[uiBufferIndex]->nFilledLen = (uiSecondaryBufferSamples * SAMPLE_SIZE_BITS * NUM_CHANNELS)>>3;
+    audioBuffers[uiBufferIndex]->nFilledLen = (uiSecondaryBufferSamples * 4);
 
 	error = OMX_EmptyThisBuffer(OMX_Handle, audioBuffers[uiBufferIndex++]);
 	if ( error != OMX_ErrorNone)
@@ -719,44 +689,41 @@ EXPORT void CALL AiLenChanged( void )
 	int oldsamplerate, newsamplerate;
 
 	if (!pNextAudioSample) return;
-	if (critical_failure == 1) return;
+	if (critical_failure) return;
 	if (!l_PluginInit) return;
 
 	newsamplerate = OutputFreq * 100 / speed_factor;
 	oldsamplerate = GameFreq;
 
-	//DEBUG_PRINT("AiLenChanged()\n");
-
-	if (uiUnderrunMode == 1)
-	{
-		int i;
-		i = (100 * uiLatency) / (audioplay_get_latency() + 1);
-
-		if (i > 200) i = 200;
-		newsamplerate = OutputFreq * i / (speed_factor);
-	}
-
-
-
 	uiAudioBytes = (uint32_t)(*AudioInfo.AI_LEN_REG);
-
 	p = (int32_t*)(AudioInfo.RDRAM + (*AudioInfo.AI_DRAM_ADDR_REG & 0xFFFFFF));
 
-
-	if (uiUnderrunMode == 3)
+	if (bNative)
 	{
 		static uint32_t b=0, uiUnderRunCount = 0;
-		uint32_t latency = audioplay_get_latency();
+				
+		if (uiUnderrunMode)
+		{		
+			uint32_t latency = audioplay_get_latency();
 
-		if(latency > uiLatency)
-		{
-			DebugMessage(M64MSG_VERBOSE, "Waiting %dms ", latency - uiLatency);
-			usleep((latency - uiLatency) * 1000 );
-		}
-		else if (latency == 0)
-		{
-			DebugMessage(M64MSG_WARNING, "Audio Buffer under run(%d)", uiUnderRunCount);
-			uiUnderRunCount++;
+			if(latency > uiLatency)
+			{
+				DebugMessage(M64MSG_VERBOSE, "Waiting %dms ", latency - uiLatency);
+				usleep((latency - uiLatency) * 1000 );
+			}
+			else if (latency == 0)
+			{
+				DebugMessage(M64MSG_WARNING, "Audio Buffer under run(%d)", uiUnderRunCount);
+				uiUnderRunCount++;
+			}
+
+			if (uiUnderrunMode == 2 && latency < uiLatency/2)
+			{
+				audioBuffers[b]->pBuffer = (void*)p;
+				audioBuffers[b]->nFilledLen = uiAudioBytes;
+				OMX_EmptyThisBuffer(OMX_Handle, audioBuffers[b++]);
+				if (b >= uiNumBuffers) b = 0;
+			}
 		}
 
 		audioBuffers[b]->pBuffer = (void*)p;
@@ -866,10 +833,10 @@ EXPORT int CALL InitiateAudio( AUDIO_INFO Audio_Info )
 	AudioInfo = Audio_Info;
 
 	OMX_ERRORTYPE error;
-	
+
 	error = OMX_Init();
 	if(error != OMX_ErrorNone) DebugMessage(M64MSG_ERROR, "%d OMX_Init() failed", __LINE__);
-	
+
 return 1;
 }
 
@@ -880,7 +847,7 @@ static void InitializeAudio(int freq)
 	GameFreq = freq;
 
 
-	int buffer_size = (uiSecondaryBufferSamples * SAMPLE_SIZE_BITS * OUT_CHANNELS(NUM_CHANNELS))>>3;
+	int buffer_size = (uiSecondaryBufferSamples * 4);
 
 	switch (uiOutputFrequencyMode)
 	{
@@ -890,7 +857,7 @@ static void InitializeAudio(int freq)
 	case 1:										//Audo
 		if (uiOutputPort == 1)
 		{
-			if (0 == vc_tv_hdmi_audio_supported(EDID_AudioFormat_ePCM, OUT_CHANNELS(NUM_CHANNELS), freq, SAMPLE_SIZE_BITS))
+			if (0 == vc_tv_hdmi_audio_supported(EDID_AudioFormat_ePCM, 2 /*channels*/, freq, 16))
 			{
 				DebugMessage(M64MSG_VERBOSE, "HDMI supports requested Frequency");
 				break;
@@ -942,7 +909,7 @@ static void InitializeAudio(int freq)
 			OutputFreq = uiOutputFrequencyMode;
 
 			// Does not work for me but worth a try ...
-			if (0 == vc_tv_hdmi_audio_supported(EDID_AudioFormat_ePCM, OUT_CHANNELS(NUM_CHANNELS), OutputFreq, SAMPLE_SIZE_BITS))
+			if (0 == vc_tv_hdmi_audio_supported(EDID_AudioFormat_ePCM, 2, OutputFreq, 16))
 			{
 				DebugMessage(M64MSG_VERBOSE, "HDMI supports Audio at %d Hz", OutputFreq);
 			}
@@ -958,7 +925,12 @@ static void InitializeAudio(int freq)
 		break;
 	}
 	
-	if (uiUnderrunMode == 3) OutputFreq = freq;
+	if (bNative)
+	{
+ 		OutputFreq = freq;
+		uiSecondaryBufferSamples = DEFAULT_BUFFER_SIZE;
+		uiLatency = DEFAULT_LATENCY;
+	}
 
 	if (audioBuffers)
 	{
@@ -971,11 +943,9 @@ static void InitializeAudio(int freq)
 
 	uiNumBuffers = 2 + OutputFreq * uiLatency / (uiSecondaryBufferSamples*1000);
 
-	audioplay_create(NUM_CHANNELS, SAMPLE_SIZE_BITS, uiNumBuffers, buffer_size);
+	audioplay_create(uiNumBuffers, buffer_size);
 
 	if (!critical_failure) audioplay_set_dest(audio_dest[uiOutputPort]);
-
-VolumeCommit();
 }
 
 EXPORT int CALL RomOpen(void)
@@ -1029,11 +999,10 @@ static void ReadConfig(void)
 	/* read the configuration values into our static variables */
 	GameFreq = 					ConfigGetParamInt(l_ConfigAudio, "DEFAULT_FREQUENCY");
 	bSwapChannels = 			ConfigGetParamBool(l_ConfigAudio, "SWAP_CHANNELS");
-	uiSecondaryBufferSamples = 	ConfigGetParamInt(l_ConfigAudio, "SECONDARY_BUFFER_SIZE");
+	bNative = 					ConfigGetParamBool(l_ConfigAudio, "NATIVE_MODE");
+	uiSecondaryBufferSamples = 	ConfigGetParamInt(l_ConfigAudio, "BUFFER_SIZE");
 	uiOutputPort = 				ConfigGetParamInt(l_ConfigAudio, "OUTPUT_PORT");
 	uiLatency = 				ConfigGetParamInt(l_ConfigAudio, "LATENCY");
-	VolDelta = 					ConfigGetParamInt(l_ConfigAudio, "VOLUME_ADJUST");
-	VolPercent = 				ConfigGetParamInt(l_ConfigAudio, "VOLUME_DEFAULT");
 	uiOutputFrequencyMode = 	ConfigGetParamInt(l_ConfigAudio, "DEFAULT_MODE");
 	uiUnderrunMode = 			ConfigGetParamInt(l_ConfigAudio, "UNDERRUN_MODE");
 
@@ -1041,107 +1010,58 @@ static void ReadConfig(void)
 
 }
 
-// Returns the most recent ummuted volume level.
-static int VolumeGetUnmutedLevel(void)
-{
-	return VolPercent;
-}
-
 // Sets the volume level based on the contents of VolPercent and VolIsMuted
+// OMX does not support Volumne control on the Raspberry PI
+/*
 static void VolumeCommit(void)
 {
-	int levelToCommit = VolIsMuted ? 0 : VolPercent;
-	
+
+	int levelToCommit = 100;
+
 	OMX_ERRORTYPE omxErr;
 
 	OMX_AUDIO_CONFIG_VOLUMETYPE volumeConfig;
 	memset(&volumeConfig, 0, sizeof(OMX_AUDIO_CONFIG_VOLUMETYPE));
 	volumeConfig.nSize = sizeof(OMX_AUDIO_CONFIG_VOLUMETYPE);
-	volumeConfig.nVersion.nVersion = OMX_VERSION;	
+	volumeConfig.nVersion.nVersion = OMX_VERSION;
 	volumeConfig.nPortIndex = PORT_INDEX;
-
-	omxErr = OMX_GetConfig(OMX_Handle, OMX_IndexConfigAudioVolume, &volumeConfig);
-	DebugMessage(M64MSG_INFO,"vol %d (%d to %d)", volumeConfig.sVolume.nValue, volumeConfig.sVolume.nMin, volumeConfig.sVolume.nMax);
 
 	volumeConfig.sVolume.nMax = 100;
 	volumeConfig.bLinear = OMX_TRUE;
 	volumeConfig.sVolume.nValue = levelToCommit;
 
 	omxErr = OMX_SetConfig(OMX_Handle, OMX_IndexConfigAudioVolume, &volumeConfig);
-	if(omxErr != OMX_ErrorNone) 
+	if(omxErr != OMX_ErrorNone)
 	{
 		DebugMessage(M64MSG_ERROR, "Could not set Audio Volume. OMX Error 0x%X", omxErr);
 	}
 }
+*/
 
 EXPORT void CALL VolumeMute(void)
 {
-	if (!l_PluginInit)
-		return;
-
-	// Store the volume level in order to restore it later
-	if (!VolIsMuted)
-		VolPercent = VolumeGetUnmutedLevel();
-
-	// Toogle mute
-	VolIsMuted = !VolIsMuted;
-	VolumeCommit();
 }
 
 EXPORT void CALL VolumeUp(void)
 {
-	if (!l_PluginInit)
-		return;
-
-	VolumeSetLevel(VolumeGetUnmutedLevel() + VolDelta);
 }
 
 EXPORT void CALL VolumeDown(void)
 {
-	if (!l_PluginInit)
-		return;
-
-	VolumeSetLevel(VolumeGetUnmutedLevel() - VolDelta);
 }
 
 EXPORT int CALL VolumeGetLevel(void)
 {
-	return VolIsMuted ? 0 : VolumeGetUnmutedLevel();
+	return 100;
 }
 
 EXPORT void CALL VolumeSetLevel(int level)
 {
-	if (!l_PluginInit)
-		return;
-
-	//if muted, unmute first
-	VolIsMuted = 0;
-
-	// adjust volume
-	VolPercent = level;
-	if (VolPercent < 0)
-		VolPercent = 0;
-	else if (VolPercent > 100)
-		VolPercent = 100;
-
-	VolumeCommit();
-	
 }
 
 EXPORT const char * CALL VolumeGetString(void)
 {
-	static char VolumeString[32];
-
-	if (VolIsMuted)
-	{
-		strcpy(VolumeString, "Mute");
-	}
-	else
-	{
-		sprintf(VolumeString, "%i%%", VolPercent);
-	}
-
-	return VolumeString;
+	return "100%";
 }
 
 
