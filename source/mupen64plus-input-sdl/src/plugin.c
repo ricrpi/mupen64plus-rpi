@@ -110,6 +110,7 @@ static unsigned short button_bits[] = {
 static int romopen = 0;         // is a rom opened
 
 static unsigned char myKeyState[SDL_NUM_SCANCODES];
+static uint32_t bKeyStateChanged = 0;
 
 #ifdef __linux__
 static struct ff_effect ffeffect[4];
@@ -261,6 +262,8 @@ doSdlKeys(unsigned char* keystate)
 	char axis_val = 0, axis_max_val;
     static int grabmouse = 1, grabtoggled = 0;
 
+	if (!bKeyStateChanged) return;
+
     axis_max_val = 80;
     if (keystate[SDL_SCANCODE_RCTRL])
         axis_max_val -= 40;
@@ -274,9 +277,6 @@ doSdlKeys(unsigned char* keystate)
             if( controller[c].button[b].key == SDL_SCANCODE_UNKNOWN || ((int) controller[c].button[b].key) < 0)
                 continue;
             if( keystate[controller[c].button[b].key] ){
-#ifdef _DEBUG
-            	DebugMessage(M64MSG_INFO, "Controller %d got button %d",c, b);
-#endif
 				controller[c].buttons.Value |= button_bits[b];
 			}
         }
@@ -294,14 +294,12 @@ doSdlKeys(unsigned char* keystate)
             if( controller[c].axis[b].key_a != SDL_SCANCODE_UNKNOWN && ((int) controller[c].axis[b].key_a) > 0)
                 if( keystate[controller[c].axis[b].key_a] )
 				{
-                	axis_val = -axis_max_val;
-					printf("%d key_a pressed %d\n", __LINE__, axis_val);
+                	axis_val = -axis_max_val;			
 				}
            if( controller[c].axis[b].key_b != SDL_SCANCODE_UNKNOWN && ((int) controller[c].axis[b].key_b) > 0)
                 if( keystate[controller[c].axis[b].key_b] )
 				{
                     axis_val = axis_max_val;
-					printf("%d key_b pressed %d\n", __LINE__, axis_val);
 				}
             if( b == 0 )
                 controller[c].buttons.X_AXIS = axis_val;
@@ -750,7 +748,7 @@ static void InitiateRumble(int cntrl)
 
     if(!test_bit(FF_RUMBLE, features))
         {
-        DebugMessage(M64MSG_WARNING, "No rumble supported on N64 joystick #%i", cntrl + 1);
+        DebugMessage(M64MSG_WARNING, "No rumble supported on N64 joystick #%i. features = 0x%X  0x%X  0x%X  0x%X", cntrl + 1, features[0], features[1], features[2], features[3]);
         controller[cntrl].event_joystick = 0;
         return;
         }
@@ -935,9 +933,14 @@ EXPORT int CALL RomOpen(void)
 *******************************************************************/
 EXPORT void CALL SDL_KeyDown(int keymod, int keysym)
 {
-#ifdef _DEBUG
-    if (!myKeyState[keysym]) printf("Input: mykeystate[%d] = 1 %d\n", keysym, keymod);
-#endif
+
+    if (!myKeyState[keysym])
+	{
+		bKeyStateChanged = 1;
+		#ifdef _DEBUG
+		printf("Input: mykeystate[%d] = 1 %d\n", keysym, keymod);
+		#endif
+	}
 	myKeyState[keysym] = 1;
 }
 
@@ -950,9 +953,14 @@ EXPORT void CALL SDL_KeyDown(int keymod, int keysym)
 *******************************************************************/
 EXPORT void CALL SDL_KeyUp(int keymod, int keysym)
 {
-#ifdef _DEBUG
-    if (myKeyState[keysym]) printf("Input: mykeystate[%d] = 0 %d\n", keysym, keymod);
-#endif
+
+    if (myKeyState[keysym]) 
+	{
+		bKeyStateChanged = 1;
+		#ifdef _DEBUG
+		printf("Input: mykeystate[%d] = 0 %d\n", keysym, keymod);
+		#endif
+	}
 	myKeyState[keysym] = 0;
 }
 
