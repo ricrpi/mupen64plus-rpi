@@ -67,7 +67,7 @@ extern uint32_t SDL_GetTicks(void);
 #define OUTPUT_PORT 1
 
 /* Latency in ms that the audio buffers may have*/
-#define DEFAULT_LATENCY 100
+#define DEFAULT_LATENCY 300
 
 /* Number of buffers used by Audio*/
 #define DEFAULT_NUM_BUFFERS 3
@@ -701,10 +701,11 @@ EXPORT void CALL AiLenChanged( void )
 	if (bNative)
 	{
 		static uint32_t b=0, uiUnderRunCount = 0;
-				
+		uint32_t latency =0;	
+			
 		if (uiUnderrunMode)
 		{		
-			uint32_t latency = audioplay_get_latency();
+			latency = audioplay_get_latency();
 
 			if(latency > uiLatency)
 			{
@@ -725,6 +726,10 @@ EXPORT void CALL AiLenChanged( void )
 				if (b >= uiNumBuffers) b = 0;
 			}
 		}
+
+		//Lylat wars uses 3 buffers and AiLenChanged is called every 200ms
+		//Super Mario also uses 3 buffers, length is smaller and frequency is lower but AiLenChanged is also called every 200ms
+		//fprintf(stderr, "%p, length %u, latency, %u, %dms\n", p, uiAudioBytes, latency, SDL_GetTicks());
 
 		audioBuffers[b]->pBuffer = (void*)p;
 		audioBuffers[b]->nFilledLen = uiAudioBytes;
