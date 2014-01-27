@@ -17,7 +17,7 @@
 #include <bcm_host.h>
 
 #include <SDL/SDL_keysym.h>
-
+#include "memory/dma.h"
 
 //#define DEBUG_PRINT(...) printf(__VA_ARGS__)
 
@@ -183,9 +183,10 @@ static void restoreKeyboard()
 	}
 }
 
-void restKeyboard(int val)
+void ForceClose(int val)
 {
 	DEBUG_PRINT("signal %d, restoring keyboard\n", val);
+	dma_close();
 	restoreKeyboard();
 }
 
@@ -208,11 +209,11 @@ static int setupKeyboard()
     tcsetattr(0, TCSANOW, &tty_attr);
 
     // we want the keyboard returned to normal if something goes wrong
-	signal(SIGILL, &restKeyboard);	//illegal instruction
-	signal(SIGTERM, &restKeyboard);
-	signal(SIGSEGV, &restKeyboard);
-	signal(SIGINT, &restKeyboard);
-	signal(SIGQUIT, &restKeyboard);
+	signal(SIGILL, &ForceClose);	//illegal instruction
+	signal(SIGTERM, &ForceClose);
+	signal(SIGSEGV, &ForceClose);
+	signal(SIGINT, &ForceClose);
+	signal(SIGQUIT, &ForceClose);
 
 	/* save old keyboard mode */
     if (ioctl(0, KDGKBMODE, &old_keyboard_mode) < 0)

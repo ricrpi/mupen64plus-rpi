@@ -47,7 +47,9 @@
 #include "savestates.h"
 #include "util.h"
 
+#include "memory/dma.h"
 #include "memory/memory.h"
+
 #include "osal/files.h"
 #include "osal/preproc.h"
 #include "osd/osd.h"
@@ -198,7 +200,8 @@ int main_set_core_defaults(void)
     ConfigSetDefaultString(g_CoreConfig, "SaveSRAMPath", "", "Path to directory where SRAM/EEPROM data (in-game saves) are stored. If this is blank, the default value of ${UserConfigPath}/save will be used");
     ConfigSetDefaultString(g_CoreConfig, "SharedDataPath", "", "Path to a directory to search when looking for shared data files");
 	ConfigSetDefaultInt(g_CoreConfig, "Scheduler", 10, "Scheduling policy. 0 for Standard (SCHED_OTHER), 1-99 RealTime FIFO policy with Priority of [N]");
-    
+    ConfigSetDefaultInt(g_CoreConfig, "DMA_MODE", 1, "0 Software, 1 Hardware, 2 Hardware with reserved RAM (kernel must boot with mem=224/480M max_mem=256/512M$#");
+
 	/* handle upgrades */
     if (bUpgrade)
     {
@@ -685,6 +688,7 @@ void new_vi(void)
     static unsigned int CounterTime = 0;
     static unsigned int CalculatedTime ;
     static int VI_Counter = 0;
+	
 
     double VILimitMilliseconds = 1000.0 / ROM_PARAMS.vilimit;
     double AdjustedLimit = VILimitMilliseconds * 100.0 / l_SpeedFactor;  // adjust for selected emulator speed
@@ -713,7 +717,7 @@ void new_vi(void)
         if (time > 0 && l_MainSpeedLimit)
         {
             DebugMessage(M64MSG_VERBOSE, "    new_vi(): Waiting %ims", time);
-            //SDL_Delay(time);
+            SDL_Delay(time);
         }
         CurrentFPSTime = CurrentFPSTime + time;
     }
@@ -805,6 +809,8 @@ m64p_error main_run(void)
     /* set up the SDL key repeat and event filter to catch keyboard/joystick commands for the core */
     event_initialize();
 
+	dma_initialize();
+
     /* initialize the on-screen display */
     if (ConfigGetParamBool(g_CoreConfig, "OnScreenDisplay"))
     {
@@ -857,6 +863,8 @@ m64p_error main_run(void)
     audio.romClosed();
     gfx.romClosed();
     free_memory();
+
+	dma_close();
 
     // clean up
     g_EmulatorRunning = 0;

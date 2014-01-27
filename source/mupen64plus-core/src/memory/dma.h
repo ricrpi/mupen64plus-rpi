@@ -22,12 +22,15 @@
 #ifndef DMA_H
 #define DMA_H
 
+void* dma_allocate_memory(unsigned int size);
+void dma_WaitComplete(unsigned int type);
+void dma_initialize(void);
 void dma_pi_write(void);
 void dma_pi_read(void);
 void dma_si_write(void);
 void dma_si_read(void);
 void dma_sp_write(void);
 void dma_sp_read(void);
-
+void dma_close(void);
 #endif
 

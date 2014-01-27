@@ -22,6 +22,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>		// types
+#include <sys/mman.h>	// mmap()
+#include <unistd.h>		// usleep()
+#include <fcntl.h>
 
 #include "api/m64p_types.h"
 
@@ -43,6 +47,9 @@
 #include "main/main.h"
 #include "main/rom.h"
 #include "main/util.h"
+#include "r4300/new_dynarec/assem_arm.h"
+
+//---------------------------------------------
 
 #define MODE 1 //0,1,2
 #define PRINT_DMA_MSG(...) DebugMessage(__VA_ARGS__)
@@ -52,11 +59,239 @@
 #define PRINT_DMA_MSG(...)
 #endif
 
-#if !defined(NO_ASM) && defined(ARM) && MODE == 2
-extern unsigned int dma_copy(void*, void*, unsigned int, unsigned int, unsigned it);
-#endif
+
+#define PAGE_SIZE               4096
+#define PAGE_SHIFT              12
+
+#define DMA_CHAN_SIZE           0x100
+#define DMA_CHAN_MIN            0
+#define DMA_CHAN_MAX            14
+#define DMA_CHAN_DEFAULT        14
+
+#define DMA_BASE                0x20007000
+#define DMA_LEN                 DMA_CHAN_SIZE * (DMA_CHAN_MAX+1)
+
+
+#define DMA_NO_WIDE_BURSTS		(1<<26)
+#define DMA_WAIT_RESP			(1<<3)
+#define DMA_D_DREQ				(1<<6)
+#define DMA_PER_MAP(x)			((x)<<16)
+#define DMA_END					(1<<1)
+#define DMA_RESET				(1<<31)
+#define DMA_INT 				(1<<2)
+
+#define DMA_CS					(0x00/4)
+#define DMA_CONBLK_AD			(0x04/4)
+#define DMA_DEBUG				(0x20/4)
+
+
+typedef struct {
+        uint32_t info, src, dst, length,
+                 stride, next, pad[2];
+} dma_cb_t;
+
+typedef struct {
+        uint32_t physaddr;
+} page_map_t;
+
 
 static unsigned char sram[0x8000];
+static unsigned int dmaMode = 0;
+static volatile uint32_t *dma_reg;
+static int dma_chan = DMA_CHAN_DEFAULT;
+static dma_cb_t *cb_base;
+page_map_t *page_map = NULL;
+
+static uint8_t *virtbase;
+static uint8_t *virtcached;
+
+static uint32_t num_pages = 0;
+
+//----------------------------------------------
+
+static void make_pagemap(void);
+
+//----------------------------------------------
+
+static uint32_t mem_virt_to_phys(void *virt)
+{
+	if (virt)
+	{
+       	uint32_t offset = (uint8_t *)virt - virtbase;
+		DebugMessage(M64MSG_INFO, "mem_virt_to_phys(%p) offset %x, page %d, .p addr 0x%x", virt, offset, offset >> PAGE_SHIFT, page_map[offset >> PAGE_SHIFT].physaddr + (offset % PAGE_SIZE));
+    	return page_map[offset >> PAGE_SHIFT].physaddr + (offset % PAGE_SIZE);
+	}
+
+	DebugMessage(M64MSG_ERROR, "mem_virt_to_phys(0)");
+	return 0;
+}
+
+static uint32_t CrossPageBoundary(void* a1, void* a2)
+{
+	return (((a1 - (void*)virtbase) >> PAGE_SHIFT) != ((a2 - (void*)virtbase) >> PAGE_SHIFT));
+}
+
+static void * map_peripheral(uint32_t base, uint32_t len)
+{
+    int fd = open("/dev/mem", O_RDWR);
+    void * vaddr;
+
+    if (fd < 0)
+	{
+            DebugMessage(M64MSG_ERROR, "%d, Failed to open /dev/mem: %m", __LINE__);
+    		return NULL;
+	}	
+	else
+	{
+		vaddr = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_SHARED, fd, base);
+    
+		if (vaddr == MAP_FAILED)
+		{ 
+			DebugMessage(M64MSG_ERROR, "Failed to map peripheral at 0x%08x: %m\n", base);
+			return NULL;
+		}      		
+		
+		close(fd);
+		return vaddr;
+	}
+	
+	return NULL;        
+}
+
+
+void* dma_allocate_memory(unsigned int size)
+{
+	if (0 == dmaMode)
+	{
+		return mmap ((u_char *)BASE_ADDR, size,
+		        PROT_READ | PROT_WRITE | PROT_EXEC,
+		        MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
+		        -1, 0);
+	}
+	else if (1 == dmaMode)
+	{
+		num_pages = (size >> PAGE_SHIFT) + 1; //Add 1 for DMA control block memory
+
+		//num_cbs =     num_samples * 2 + MAX_SERVOS;
+		//num_pages = (num_cbs * sizeof(dma_cb_t) + num_samples * 4 + MAX_SERVOS * 4 + PAGE_SIZE - 1) >> PAGE_SHIFT;
+
+		virtcached = mmap((u_char *)BASE_ADDR, num_pages * PAGE_SIZE, PROT_READ|PROT_WRITE,
+                        MAP_SHARED|MAP_ANONYMOUS|MAP_NORESERVE|MAP_LOCKED,
+                        -1, 0);
+
+        if (virtcached == MAP_FAILED) 					DebugMessage(M64MSG_ERROR, "Failed to mmap for cached pages: %m\n");
+        if ((unsigned long)virtcached & (PAGE_SIZE-1)) 	DebugMessage(M64MSG_ERROR, "Virtual address is not page aligned\n");
+        
+		//force linux to allocate
+		memset(virtcached, 0, num_pages * PAGE_SIZE);
+
+        virtbase = mmap(NULL, num_pages * PAGE_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC,
+                        MAP_SHARED|MAP_ANONYMOUS|MAP_NORESERVE|MAP_LOCKED, -1, 0);
+
+		//RJH. I don't think this is needed as mmap manual states pages are unmapped if mmap'ed a second time
+		//unmap(virtbase, num_pages * PAGE_SIZE);		
+		
+		make_pagemap();
+
+		cb_base = (dma_cb_t *)(virtbase + size);
+
+		dma_reg[DMA_CS] = DMA_RESET;
+
+        usleep(10);
+
+        dma_reg[DMA_CS] = DMA_INT | DMA_END;
+		dma_reg[DMA_CONBLK_AD] = mem_virt_to_phys(cb_base);
+        dma_reg[DMA_DEBUG] = 7; // clear debug error flags
+        dma_reg[DMA_CS] = 0x10880001;        // go, mid priority, wait for outstanding writes
+
+		DebugMessage(M64MSG_INFO, "Hardware DMA Initialized"); 
+		DebugMessage(M64MSG_INFO, "virtbase = 0x%X, cb_base 0x%X => 0x%X, num_pages %d", virtbase, cb_base, mem_virt_to_phys(cb_base), num_pages); 
+
+		return virtbase;
+	}
+	else
+	{
+		DebugMessage(M64MSG_ERROR, "Invalid DMA mode %d", dmaMode);
+
+		return NULL;
+	}
+}
+
+static void make_pagemap(void)
+{
+    int i, fd, memfd, pid;
+    char pagemap_fn[64];
+
+    page_map = malloc(num_pages * sizeof(*page_map));
+    if (page_map == 0)
+            DebugMessage(M64MSG_ERROR, "Failed to malloc page_map: %m\n");
+    memfd = open("/dev/mem", O_RDWR);
+    if (memfd < 0)
+            DebugMessage(M64MSG_ERROR, "Failed to open /dev/mem: %m\n");
+    pid = getpid();
+    sprintf(pagemap_fn, "/proc/%d/pagemap", pid);
+    fd = open(pagemap_fn, O_RDONLY);
+    if (fd < 0)
+            DebugMessage(M64MSG_ERROR, "Failed to open %s: %m\n", pagemap_fn);
+    if (lseek(fd, (uint32_t)(size_t)virtcached >> 9, SEEK_SET) !=
+                                            (uint32_t)(size_t)virtcached >> 9) {
+            DebugMessage(M64MSG_ERROR, "Failed to seek on %s: %m\n", pagemap_fn);
+    }
+    for (i = 0; i < num_pages; i++) 
+	{
+        uint64_t pfn;
+        if (read(fd, &pfn, sizeof(pfn)) != sizeof(pfn)) DebugMessage(M64MSG_ERROR, "Failed to read %s: %m\n", pagemap_fn);
+        if (((pfn >> 55) & 0x1bf) != 0x10c) 			DebugMessage(M64MSG_ERROR, "Page %d not present (pfn 0x%016llx)\n", i, pfn);
+        
+		page_map[i].physaddr = (uint32_t)pfn << PAGE_SHIFT | 0x40000000;
+        if ( i%100 == 0) DebugMessage(M64MSG_INFO, "DMA %4d, p addr 0x%X, v addr 0x%X",i, page_map[i].physaddr, virtcached + i * PAGE_SIZE); 
+
+		if (mmap(virtcached + i * PAGE_SIZE, PAGE_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_SHARED|MAP_FIXED|MAP_LOCKED|MAP_NORESERVE,
+                memfd, (uint32_t)pfn << PAGE_SHIFT | 0x40000000) != virtcached + i * PAGE_SIZE) 
+		{
+			DebugMessage(M64MSG_ERROR, "Failed to create uncached map of page %d at %p\n", i, virtbase + i * PAGE_SIZE);
+        }
+    }
+    close(fd);
+    close(memfd);
+
+	DebugMessage(M64MSG_INFO, "Done DMA page map"); 
+    memset(virtbase, 0, num_pages * PAGE_SIZE);
+	DebugMessage(M64MSG_INFO, "Cleaned DMA pages"); 
+}
+
+void dma_WaitComplete(unsigned int type)
+{
+
+}
+
+void dma_initialize()
+{
+	dmaMode = ConfigGetParamInt(g_CoreConfig, "DMA_MODE");
+
+	if (dmaMode)
+	{
+		dma_reg = map_peripheral(DMA_BASE, DMA_LEN);
+
+		if (!dma_reg)
+		{
+			dmaMode = 0;
+			DebugMessage(M64MSG_INFO, "DMA will be done by Software"); 
+			return;
+		}
+
+		//move DMA pointer to desired channel
+		dma_reg += dma_chan * DMA_CHAN_SIZE / sizeof(uint32_t);
+	}
+}
+
+void dma_close(void)
+{
+	if (dma_reg && virtbase) 
+	{
+		dma_reg[DMA_CS] = DMA_RESET;
+    }
+}
 
 static char *get_sram_path(void)
 {

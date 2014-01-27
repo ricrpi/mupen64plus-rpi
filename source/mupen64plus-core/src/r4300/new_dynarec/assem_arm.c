@@ -1002,7 +1002,7 @@ static u_int genjmp(u_int addr)
       }
     }
   }
-  assert(offset>=-33554432&&offset<33554432);
+  assert(offset>=-33554432&&offset<33554432); // 0x200000
   return ((u_int)offset>>2)&0xffffff;
 }
 
