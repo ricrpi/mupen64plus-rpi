@@ -44,6 +44,7 @@
 #include "exception.h"
 #include "reset.h"
 #include "new_dynarec/new_dynarec.h"
+#include "memory/dma.h"
 
 #ifdef WITH_LIRC
 #include "main/lirc.h"
@@ -665,6 +666,7 @@ X11_PumpEvents();
             break;
 
         case SI_INT:
+			if (2 == dmaMode) dma_WaitComplete(SI_INT); //TODO not Implemented
 #ifdef WITH_LIRC
             lircCheckInput();
 #endif //WITH_LIRC
@@ -683,6 +685,9 @@ X11_PumpEvents();
             break;
         case PI_INT:
             remove_interupt_event();
+#ifdef M64P_ALLOCATE_MEMORY && 0
+			//if (2 == dmaMode) dma_WaitComplete(PI_INT);
+#endif
             MI_register.mi_intr_reg |= 0x10;
             pi_register.read_pi_status_reg &= ~3;
             if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
@@ -730,6 +735,9 @@ X11_PumpEvents();
 
         case SP_INT:
             remove_interupt_event();
+#ifdef M64P_ALLOCATE_MEMORY
+			if (2 == dmaMode) dma_WaitComplete(SP_INT);
+#endif
             sp_register.sp_status_reg |= 0x203;
             // sp_register.sp_status_reg |= 0x303;
     

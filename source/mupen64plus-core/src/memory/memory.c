@@ -68,15 +68,22 @@ AI_register ai_register;
 DPC_register dpc_register;
 DPS_register dps_register;
 
-ALIGN(16, unsigned int rdram[0x800000/4]);
+#ifdef M64P_ALLOCATE_MEMORY
+	unsigned int* rdram;
+	unsigned int* SP_DMEM;
+	unsigned int* SP_IMEM;
+	unsigned int* PIF_RAM;
+#else
+	ALIGN(16, unsigned int rdram[0x800000/4]);
+	unsigned int SP_DMEM[0x1000/4*2];
+	unsigned int *SP_IMEM = SP_DMEM+0x1000/4;
+	unsigned int PIF_RAM[0x40/4];
+#endif
 
-unsigned char *rdramb = (unsigned char *)(rdram);
-unsigned int SP_DMEM[0x1000/4*2];
-unsigned int *SP_IMEM = SP_DMEM+0x1000/4;
-unsigned char *SP_DMEMb = (unsigned char *)(SP_DMEM);
-unsigned char *SP_IMEMb = (unsigned char*)(SP_DMEM+0x1000/4);
-unsigned int PIF_RAM[0x40/4];
-unsigned char *PIF_RAMb = (unsigned char *)(PIF_RAM);
+unsigned char *rdramb ;//= (unsigned char *)(rdram);
+unsigned char *SP_DMEMb;// = (unsigned char *)(SP_DMEM);
+unsigned char *SP_IMEMb;// = (unsigned char*)(SP_DMEM+0x1000/4);
+unsigned char *PIF_RAMb;// = (unsigned char *)(PIF_RAM);
 
 #if NEW_DYNAREC != NEW_DYNAREC_ARM
 // address : address of the read/write operation being done

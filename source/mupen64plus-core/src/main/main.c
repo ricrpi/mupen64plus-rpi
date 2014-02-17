@@ -40,12 +40,15 @@
 #include "api/m64p_config.h"
 #include "api/debugger.h"
 #include "api/vidext.h"
+#include "r4300/new_dynarec/assem_arm.h"
 
 #include "main.h"
 #include "eventloop.h"
 #include "rom.h"
 #include "savestates.h"
 #include "util.h"
+#include <sys/mman.h>	// mmap()
+#include <fcntl.h>
 
 #include "memory/dma.h"
 #include "memory/memory.h"
@@ -82,6 +85,10 @@ m64p_frame_callback g_FrameCallback = NULL;
 int         g_MemHasBeenBSwapped = 0;   // store byte-swapped flag so we don't swap twice when re-playing game
 int         g_EmulatorRunning = 0;      // need separate boolean to tell if emulator is running, since --nogui doesn't use a thread
 
+volatile unsigned char* n64_memory = MAP_FAILED;
+//unsigned char* extra_memory;
+page_map_t* n64_memory_map;
+
 /** static (local) variables **/
 static int   l_CurrentFrame = 0;         // frame counter
 static int   l_TakeScreenshot = 0;       // Tell OSD Rendering callback to take a screenshot just before drawing the OSD
@@ -92,6 +99,8 @@ static int   l_MainSpeedLimit = 1;       // insert delay during vi_interrupt to 
 static osd_message_t *l_msgVol = NULL;
 static osd_message_t *l_msgFF = NULL;
 static osd_message_t *l_msgPause = NULL;
+
+static unsigned int num_pages;
 
 /*********************************************************************************************************
 * static functions
@@ -200,7 +209,7 @@ int main_set_core_defaults(void)
     ConfigSetDefaultString(g_CoreConfig, "SaveSRAMPath", "", "Path to directory where SRAM/EEPROM data (in-game saves) are stored. If this is blank, the default value of ${UserConfigPath}/save will be used");
     ConfigSetDefaultString(g_CoreConfig, "SharedDataPath", "", "Path to a directory to search when looking for shared data files");
 	ConfigSetDefaultInt(g_CoreConfig, "Scheduler", 10, "Scheduling policy. 0 for Standard (SCHED_OTHER), 1-99 RealTime FIFO policy with Priority of [N]");
-    ConfigSetDefaultInt(g_CoreConfig, "DMA_MODE", 1, "0 Software, 1 Hardware, 2 Hardware with reserved RAM (kernel must boot with mem=224/480M max_mem=256/512M$#");
+    ConfigSetDefaultInt(g_CoreConfig, "DMA_MODE", 1, "DMA mode. 0 Original Software method (Endian and Alignment aware), 1 Faster Software, 2 Hardware"); // , 3 Hardware with reserved RAM (kernel must boot with mem=224/480M max_mem=256/512M$#");
 
 	/* handle upgrades */
     if (bUpgrade)
@@ -732,6 +741,100 @@ void new_vi(void)
     end_section(IDLE_SECTION);
 }
 
+#ifdef M64P_ALLOCATE_MEMORY
+static char * virtcached;
+
+static void make_pagemap(void)
+{
+    int i, fd, memfd, pid;
+    char pagemap_fn[64];
+
+	DebugMessage(M64MSG_INFO, "make_pagemap()");
+
+	n64_memory_map = malloc(num_pages* sizeof(page_map_t) );
+    if (n64_memory_map == 0)
+            DebugMessage(M64MSG_ERROR, "Failed to malloc page_map: %m\n");
+    memfd = open("/dev/mem", O_RDWR);
+    if (memfd < 0)
+            DebugMessage(M64MSG_ERROR, "Failed to open /dev/mem: %m\n");
+    pid = getpid();
+    sprintf(pagemap_fn, "/proc/%d/pagemap", pid);
+    fd = open(pagemap_fn, O_RDONLY);
+    if (fd < 0)
+            DebugMessage(M64MSG_ERROR, "Failed to open %s: %m\n", pagemap_fn);
+    if (lseek(fd, (uint32_t)(size_t)virtcached >> 9, SEEK_SET) !=
+                                            (uint32_t)(size_t)virtcached >> 9) {
+            DebugMessage(M64MSG_ERROR, "Failed to seek on %s: %m\n", pagemap_fn);
+    }
+    for (i = 0; i < num_pages; i++) 
+	{
+        uint64_t pfn;
+        if (read(fd, &pfn, sizeof(pfn)) != sizeof(pfn)) DebugMessage(M64MSG_ERROR, "Failed to read %s: %m\n", pagemap_fn);
+        if (((pfn >> 55) & 0x1bf) != 0x10c) 			DebugMessage(M64MSG_ERROR, "Page %d not present (pfn 0x%016llx)\n", i, pfn);
+        
+		n64_memory_map[i].physaddr = (uint32_t)pfn << PAGE_SHIFT | 0x40000000;
+		n64_memory_map[i].bNextAligned = 0;
+	
+		//record if last page preceeds this one in physical memory 
+		if (i > 0 && n64_memory_map[i-1].physaddr + PAGE_SIZE == n64_memory_map[i].physaddr) n64_memory_map[i-1].bNextAligned = 1; 
+	        
+		if ( i<10 || i%1000 == 0 || i == num_pages-1) DebugMessage(M64MSG_INFO, "DMA %4d, p addr 0x%X, v addr 0x%X",i, n64_memory_map[i].physaddr, n64_memory + i * PAGE_SIZE); 
+
+		if (mmap(n64_memory + i * PAGE_SIZE, PAGE_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_SHARED|MAP_FIXED|MAP_LOCKED|MAP_NORESERVE,
+                memfd, (uint32_t)pfn << PAGE_SHIFT | 0x40000000) != n64_memory + i * PAGE_SIZE) 
+		{
+			DebugMessage(M64MSG_ERROR, "Failed to create uncached map of page %d at %p\n", i, n64_memory + i * PAGE_SIZE);
+			break;
+        }
+    }
+
+    close(fd);
+    close(memfd);
+
+	//DebugMessage(M64MSG_INFO, "Allocated N64 memory"); 
+    memset(n64_memory, 0, num_pages * PAGE_SIZE);
+	DebugMessage(M64MSG_INFO, "Zeroed N64 memory"); 
+}
+#endif
+
+/*
+static void p_m(volatile unsigned char* m, unsigned int l)
+{
+	int x;
+	printf("\n\t");
+	for (x=0; x<l;x++)
+	{
+		printf("%3d ",m[x]);
+		if (x%16==15) printf("\n\t");
+	}
+	printf("\n");
+}
+
+static void test_dma(volatile unsigned char* m)
+{
+	int x;
+
+	dma_initialize();
+
+	for (x=0; x<32; x++)
+	{
+		m[x] = x+1;
+	}
+
+	p_m(m,32*4);
+
+	dma_copy(m, m + 64, 32);
+
+	dma_WaitComplete(0);
+
+	p_m(m,32*4);
+	
+	RPI_CloseWindow();	//restore keyboard
+	exit(0);
+}
+*/
+
+
 /*********************************************************************************************************
 * emulation thread - runs the core
 */
@@ -740,6 +843,8 @@ m64p_error main_run(void)
     /* take the r4300 emulator mode from the config file at this point and cache it in a global variable */
     r4300emu = ConfigGetParamInt(g_CoreConfig, "R4300Emulator");
 	uint32_t SchedulerPriority = ConfigGetParamInt(g_CoreConfig, "Scheduler");
+	
+	dmaMode = ConfigGetParamInt(g_CoreConfig, "DMA_MODE");
 	
 	if (SchedulerPriority > 0)
 	{
@@ -771,9 +876,85 @@ m64p_error main_run(void)
 				DebugMessage(M64MSG_WARNING, "Could not run as SCHED_FIFO, priority %d, error %d", SchedulerPriority, e);
 			}
 		}
-		
-		
 	}
+
+	//Map some physical memory for use with DMA
+	#ifdef M64P_ALLOCATE_MEMORY
+
+		num_pages = ( (M64P_MEMORY_SIZE + PAGE_SIZE + (PAGE_SIZE-1)) >> PAGE_SHIFT);	//extra page for alignment issues
+		
+		virtcached = mmap(NULL, num_pages * PAGE_SIZE, PROT_READ|PROT_WRITE,MAP_SHARED|MAP_ANONYMOUS|MAP_NORESERVE|MAP_LOCKED, -1, 0);
+
+        if (virtcached == MAP_FAILED) 					DebugMessage(M64MSG_ERROR, "Failed to mmap for cached pages: %m\n");
+    
+		if ((unsigned long)virtcached & (PAGE_SIZE-1))
+		{
+ 				DebugMessage(M64MSG_ERROR, "virtcached is not page aligned\n");
+				virtcached = (unsigned char*)(((unsigned long)virtcached & ~(PAGE_SIZE-1)) + PAGE_SIZE);	//align virtcached
+		}            	
+	
+		//force linux to allocate
+		memset(virtcached, 0, num_pages * PAGE_SIZE);
+        
+		n64_memory = mmap(NULL, num_pages * PAGE_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS|MAP_NORESERVE|MAP_LOCKED, -1, 0);
+
+		if (n64_memory == MAP_FAILED) 					DebugMessage(M64MSG_ERROR, "Failed to mmap for n64_memory pages (%d): %m\n", num_pages);		
+		else
+		{
+			if ((unsigned long)n64_memory & (PAGE_SIZE-1)){
+ 				DebugMessage(M64MSG_ERROR, "n64_memory is not page aligned\n");
+				n64_memory = (unsigned char*)(((unsigned long)n64_memory & ~(PAGE_SIZE-1)) + PAGE_SIZE);	//align n64_memory
+			}    
+    
+			rdram = (unsigned int*)(n64_memory);
+			SP_DMEM = rdram   + 0x800000/4;
+			SP_IMEM = SP_DMEM + 0x1000/4;
+			PIF_RAM = SP_DMEM + 0x1000/4*2;
+			sram = (unsigned char*)(PIF_RAM + 0x40/4);
+			cb_base = (dma_cb_t*)(((unsigned int)sram + 0x8000+0xff)&~0xff);
+			
+			rdramb = 	(unsigned char *)(rdram);
+			SP_DMEMb = 	(unsigned char *)(SP_DMEM);
+			SP_IMEMb = 	(unsigned char *)(SP_IMEM);
+			PIF_RAMb = 	(unsigned char *)(PIF_RAM);
+
+			//RJH. I don't think this is needed as mmap manual states pages are unmapped if mmap'ed a second time
+			//unmap(virtbase, num_pages * PAGE_SIZE);		
+	
+			DebugMessage(M64MSG_INFO, 
+				"\t\tvirtcached   %p\n"
+				"\t\tnum_pages    %10d, %d bytes\n"
+				"\t\tn64_memory   %p to %p\n"
+				"\t\trdram        %p, 0x%x\n"
+				"\t\tSP_DMEM      %p\n"
+				"\t\tPIF_RAM      %p\n"
+				"\t\tsram         %p\n"
+				"\t\tcb_base      %p\n"
+				
+				, virtcached, num_pages, M64P_MEMORY_SIZE, n64_memory, n64_memory + M64P_MEMORY_SIZE, rdram, (SP_DMEM - rdram),SP_DMEM, PIF_RAM, sram, cb_base);
+
+			//n64_memory has changed location so re-initialize the plugins (this is normally called by the front-end)
+			plugin_start(M64PLUGIN_RSP);
+		    plugin_start(M64PLUGIN_GFX);
+		    plugin_start(M64PLUGIN_AUDIO);
+		    plugin_start(M64PLUGIN_INPUT);
+
+			make_pagemap();
+		}	
+	#else
+			rdramb = 	(unsigned char *)(rdram);
+			SP_DMEMb = 	(unsigned char *)(SP_DMEM);
+			SP_IMEMb = 	(unsigned char *)(SP_IMEM);
+			PIF_RAMb = 	(unsigned char *)(PIF_RAM);
+
+			DebugMessage(M64MSG_INFO, 
+				"\t\trdram        %p\n"
+				"\t\tSP_DMEM      %p\n"
+				"\t\tPIF_RAM      %p\n"
+				"\t\tsram         %p\n"
+				, rdram, SP_DMEM, PIF_RAM, sram);
+	#endif
+	//test_dma(n64_memory);
 
     /* set some other core parameters based on the config file values */
     savestates_set_autoinc_slot(ConfigGetParamBool(g_CoreConfig, "AutoStateSlotIncrement"));

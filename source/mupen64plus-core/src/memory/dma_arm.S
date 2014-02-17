@@ -37,7 +37,7 @@ sl:
 //    }
 //	 return
 // }
-
+/*
 	.global	dma_copy
 	.hidden dma_copy
 	.type	dma_copy, %function
@@ -87,4 +87,4 @@ E2:
 E:
 	mov r0, #1
 	mov	pc, lr				// return 1
-		
+	*/	

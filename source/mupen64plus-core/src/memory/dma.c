@@ -23,8 +23,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>		// types
-#include <sys/mman.h>	// mmap()
 #include <unistd.h>		// usleep()
+#include <sys/mman.h>	// mmap()
 #include <fcntl.h>
 
 #include "api/m64p_types.h"
@@ -51,85 +51,112 @@
 
 //---------------------------------------------
 
-#define MODE 1 //0,1,2
 #define PRINT_DMA_MSG(...) DebugMessage(__VA_ARGS__)
-
 
 #ifndef PRINT_DMA_MSG
 #define PRINT_DMA_MSG(...)
 #endif
-
-
-#define PAGE_SIZE               4096
-#define PAGE_SHIFT              12
 
 #define DMA_CHAN_SIZE           0x100
 #define DMA_CHAN_MIN            0
 #define DMA_CHAN_MAX            14
 #define DMA_CHAN_DEFAULT        14
 
+#if 1
 #define DMA_BASE                0x20007000
+#else
+#define DMA_BASE				0x7E007000	// BCM2835 ARM Peripherals.pdf says the address is this
+#endif
+
 #define DMA_LEN                 DMA_CHAN_SIZE * (DMA_CHAN_MAX+1)
 
+#define DMA_CS 		(0x00/4)
+#define DMA_CONBLK_AD 	(0x04/4)
+#define DMA_TI 		(0x08/4)
+#define DMA_SRC 	(0x0C/4)
+#define DMA_DEST 	(0x10/4)
+#define DMA_TLEN 	(0x14/4)
+#define DMA_STRIDE	(0x18/4)
+#define DMA_NEXT	(0x1C/4)
+#define DMA_DEBUG 	(0x20/4)
 
-#define DMA_NO_WIDE_BURSTS		(1<<26)
-#define DMA_WAIT_RESP			(1<<3)
-#define DMA_D_DREQ				(1<<6)
-#define DMA_PER_MAP(x)			((x)<<16)
-#define DMA_END					(1<<1)
-#define DMA_RESET				(1<<31)
-#define DMA_INT 				(1<<2)
+#define DMA_TI_NO_WIDE_BURSTS 					(1<<26)
+#define DMA_TI_D_DREQ 							(0x00000040)
+#define DMA_TI_PER_MAP(x) 						((x)<<16)
+#define DMA_TI_SRC_IGNORE						(0x00000800)	// ???
+#define DMA_TI_SRC_DREQ							(0x00000400)	// 1 DREQ selected by PERMAP will gate the src read 
+#define DMA_TI_SRC_WIDTH						(0x00000200)	// 1 = 128-bit read width, 0 = 32-bit
+#define DMA_TI_SRC_INC							(0x00000100)	// 1 addr+=4 if SRC_WIDTH=0 else addr+=32, 0 Src addr does not inc
+#define DMA_TI_DST_IGNORE						(0x00000080)	// 0 write data to dest
+#define DMA_TI_DST_DREQ							(0x00000040)	// 1 DREQ selected by PERMAP will gate the dest writes 
+#define DMA_TI_DST_WIDTH						(0x00000020)	// 1 = 128-bit write width, 0 = 32-bit
+#define DMA_TI_DST_INC							(0x00000010)	// 1 addr+=4 if DEST_WIDTH=0 else addr+=32, 0 Dest addr does not inc
+#define DMA_TI_WAIT_RESP 						(0x00000008)
+#define DMA_TI_2D		 						(0x00000002)
+#define DMA_TI_INT		 						(0x00000001)
 
-#define DMA_CS					(0x00/4)
-#define DMA_CONBLK_AD			(0x04/4)
-#define DMA_DEBUG				(0x20/4)
+#define DMA_CS_RESET 							(0x80000000)
+#define DMA_CS_ABORT 							(0x40000000)
+#define DMA_CS_DISDEBUG 						(0x20000000)
+#define DMA_CS_WAIT_FOR_OUTSTANDING_WRITES		(0x10000000)
+#define DMA_CS_PANIC_PRIORITY			 		(0x00F00000)
+#define DMA_CS_PRIORITY 						(0x000F0000)
+#define DMA_CS_ERROR							(0x00000100)
+#define DMA_CS_WAITING_FOR_OUTSTANDING_WRITES	(0x00000040)
+#define DMA_CS_DREQ_STOPS_DMA 					(0x00000020)
+#define DMA_CS_PAUSED 							(0x00000010)
+#define DMA_CS_DREQ 							(0x00000008)
+#define DMA_CS_INT 								(0x00000004)
+#define DMA_CS_END 								(0x00000002)
+#define DMA_CS_ACTIVE 							(0x00000001)
 
+#define DMA_DBG_LITE							(0x10000000)
+#define DMA_DBG_VERSION							(0x0E000000)
+#define DMA_DBG_STATE							(0x01FF0000)
+#define DMA_DBG_ID								(0x0000FF00)
+#define DMA_DBG_OUTSTANDING_WRITES				(0x000000F0)
+#define DMA_DBG_READ_ERROR						(0x00000004)
+#define DMA_DBG_FIFO_ERROR						(0x00000002)
+#define DMA_DBG_READ_LAST_NOT_SET_ERROR			(0x00000001)
 
-typedef struct {
-        uint32_t info, src, dst, length,
-                 stride, next, pad[2];
-} dma_cb_t;
+unsigned char* sram;
+unsigned int dmaMode = 0;
 
-typedef struct {
-        uint32_t physaddr;
-} page_map_t;
+static volatile uint32_t* dma_reg = NULL;
 
-
-static unsigned char sram[0x8000];
-static unsigned int dmaMode = 0;
-static volatile uint32_t *dma_reg;
 static int dma_chan = DMA_CHAN_DEFAULT;
-static dma_cb_t *cb_base;
-page_map_t *page_map = NULL;
 
-static uint8_t *virtbase;
-static uint8_t *virtcached;
+dma_cb_t *cb_base;
 
-static uint32_t num_pages = 0;
-
+static uint32_t physical_cb_base;
 //----------------------------------------------
 
-static void make_pagemap(void);
-
-//----------------------------------------------
-
+#ifdef M64P_ALLOCATE_MEMORY
 static uint32_t mem_virt_to_phys(void *virt)
 {
 	if (virt)
 	{
-       	uint32_t offset = (uint8_t *)virt - virtbase;
-		DebugMessage(M64MSG_INFO, "mem_virt_to_phys(%p) offset %x, page %d, .p addr 0x%x", virt, offset, offset >> PAGE_SHIFT, page_map[offset >> PAGE_SHIFT].physaddr + (offset % PAGE_SIZE));
-    	return page_map[offset >> PAGE_SHIFT].physaddr + (offset % PAGE_SIZE);
+       	uint32_t offset = (uint8_t *)virt - n64_memory;
+
+		if (offset >= (uint32_t)cb_base)	//cb_base is the last region in the mmap'ed space
+		{
+			DebugMessage(M64MSG_ERROR, "DMA invalid location %p, offset %d, page %d", virt, offset, (offset >> PAGE_SHIFT));
+			return 0;
+		}
+
+//		DebugMessage(M64MSG_INFO, "mem_virt_to_phys(%p), offset 0x%8x, page %4d, p addr 0x%8x", virt, offset, (offset >> PAGE_SHIFT), n64_memory_map[offset >> PAGE_SHIFT].physaddr + (offset % PAGE_SIZE));
+    	return n64_memory_map[offset >> PAGE_SHIFT].physaddr + (offset % PAGE_SIZE);
 	}
 
 	DebugMessage(M64MSG_ERROR, "mem_virt_to_phys(0)");
 	return 0;
 }
 
-static uint32_t CrossPageBoundary(void* a1, void* a2)
+static uint32_t CanDoHwTransfer(void* a1, void* a2)
 {
-	return (((a1 - (void*)virtbase) >> PAGE_SHIFT) != ((a2 - (void*)virtbase) >> PAGE_SHIFT));
+	return (((a1 - (void*)n64_memory) >> PAGE_SHIFT) == ((a2 - (void*)n64_memory) >> PAGE_SHIFT));
 }
+#endif
 
 static void * map_peripheral(uint32_t base, uint32_t len)
 {
@@ -140,157 +167,125 @@ static void * map_peripheral(uint32_t base, uint32_t len)
 	{
             DebugMessage(M64MSG_ERROR, "%d, Failed to open /dev/mem: %m", __LINE__);
     		return NULL;
-	}	
+	}
 	else
 	{
 		vaddr = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_SHARED, fd, base);
-    
+
 		if (vaddr == MAP_FAILED)
-		{ 
+		{
 			DebugMessage(M64MSG_ERROR, "Failed to map peripheral at 0x%08x: %m\n", base);
 			return NULL;
-		}      		
-		
+		}
+
 		close(fd);
 		return vaddr;
 	}
-	
-	return NULL;        
+
+	dmaMode = 1;
+	DebugMessage(M64MSG_ERROR, "Cannot get DMA Controller");
+
+	return NULL;
 }
 
-
-void* dma_allocate_memory(unsigned int size)
-{
-	if (0 == dmaMode)
-	{
-		return mmap ((u_char *)BASE_ADDR, size,
-		        PROT_READ | PROT_WRITE | PROT_EXEC,
-		        MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
-		        -1, 0);
-	}
-	else if (1 == dmaMode)
-	{
-		num_pages = (size >> PAGE_SHIFT) + 1; //Add 1 for DMA control block memory
-
-		//num_cbs =     num_samples * 2 + MAX_SERVOS;
-		//num_pages = (num_cbs * sizeof(dma_cb_t) + num_samples * 4 + MAX_SERVOS * 4 + PAGE_SIZE - 1) >> PAGE_SHIFT;
-
-		virtcached = mmap((u_char *)BASE_ADDR, num_pages * PAGE_SIZE, PROT_READ|PROT_WRITE,
-                        MAP_SHARED|MAP_ANONYMOUS|MAP_NORESERVE|MAP_LOCKED,
-                        -1, 0);
-
-        if (virtcached == MAP_FAILED) 					DebugMessage(M64MSG_ERROR, "Failed to mmap for cached pages: %m\n");
-        if ((unsigned long)virtcached & (PAGE_SIZE-1)) 	DebugMessage(M64MSG_ERROR, "Virtual address is not page aligned\n");
-        
-		//force linux to allocate
-		memset(virtcached, 0, num_pages * PAGE_SIZE);
-
-        virtbase = mmap(NULL, num_pages * PAGE_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC,
-                        MAP_SHARED|MAP_ANONYMOUS|MAP_NORESERVE|MAP_LOCKED, -1, 0);
-
-		//RJH. I don't think this is needed as mmap manual states pages are unmapped if mmap'ed a second time
-		//unmap(virtbase, num_pages * PAGE_SIZE);		
-		
-		make_pagemap();
-
-		cb_base = (dma_cb_t *)(virtbase + size);
-
-		dma_reg[DMA_CS] = DMA_RESET;
-
-        usleep(10);
-
-        dma_reg[DMA_CS] = DMA_INT | DMA_END;
-		dma_reg[DMA_CONBLK_AD] = mem_virt_to_phys(cb_base);
-        dma_reg[DMA_DEBUG] = 7; // clear debug error flags
-        dma_reg[DMA_CS] = 0x10880001;        // go, mid priority, wait for outstanding writes
-
-		DebugMessage(M64MSG_INFO, "Hardware DMA Initialized"); 
-		DebugMessage(M64MSG_INFO, "virtbase = 0x%X, cb_base 0x%X => 0x%X, num_pages %d", virtbase, cb_base, mem_virt_to_phys(cb_base), num_pages); 
-
-		return virtbase;
-	}
-	else
-	{
-		DebugMessage(M64MSG_ERROR, "Invalid DMA mode %d", dmaMode);
-
-		return NULL;
-	}
-}
-
-static void make_pagemap(void)
-{
-    int i, fd, memfd, pid;
-    char pagemap_fn[64];
-
-    page_map = malloc(num_pages * sizeof(*page_map));
-    if (page_map == 0)
-            DebugMessage(M64MSG_ERROR, "Failed to malloc page_map: %m\n");
-    memfd = open("/dev/mem", O_RDWR);
-    if (memfd < 0)
-            DebugMessage(M64MSG_ERROR, "Failed to open /dev/mem: %m\n");
-    pid = getpid();
-    sprintf(pagemap_fn, "/proc/%d/pagemap", pid);
-    fd = open(pagemap_fn, O_RDONLY);
-    if (fd < 0)
-            DebugMessage(M64MSG_ERROR, "Failed to open %s: %m\n", pagemap_fn);
-    if (lseek(fd, (uint32_t)(size_t)virtcached >> 9, SEEK_SET) !=
-                                            (uint32_t)(size_t)virtcached >> 9) {
-            DebugMessage(M64MSG_ERROR, "Failed to seek on %s: %m\n", pagemap_fn);
-    }
-    for (i = 0; i < num_pages; i++) 
-	{
-        uint64_t pfn;
-        if (read(fd, &pfn, sizeof(pfn)) != sizeof(pfn)) DebugMessage(M64MSG_ERROR, "Failed to read %s: %m\n", pagemap_fn);
-        if (((pfn >> 55) & 0x1bf) != 0x10c) 			DebugMessage(M64MSG_ERROR, "Page %d not present (pfn 0x%016llx)\n", i, pfn);
-        
-		page_map[i].physaddr = (uint32_t)pfn << PAGE_SHIFT | 0x40000000;
-        if ( i%100 == 0) DebugMessage(M64MSG_INFO, "DMA %4d, p addr 0x%X, v addr 0x%X",i, page_map[i].physaddr, virtcached + i * PAGE_SIZE); 
-
-		if (mmap(virtcached + i * PAGE_SIZE, PAGE_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_SHARED|MAP_FIXED|MAP_LOCKED|MAP_NORESERVE,
-                memfd, (uint32_t)pfn << PAGE_SHIFT | 0x40000000) != virtcached + i * PAGE_SIZE) 
-		{
-			DebugMessage(M64MSG_ERROR, "Failed to create uncached map of page %d at %p\n", i, virtbase + i * PAGE_SIZE);
-        }
-    }
-    close(fd);
-    close(memfd);
-
-	DebugMessage(M64MSG_INFO, "Done DMA page map"); 
-    memset(virtbase, 0, num_pages * PAGE_SIZE);
-	DebugMessage(M64MSG_INFO, "Cleaned DMA pages"); 
-}
-
+#ifdef M64P_ALLOCATE_MEMORY
 void dma_WaitComplete(unsigned int type)
 {
+	if (2 == dmaMode)
+	{
+//		DebugMessage(M64MSG_INFO, "dma_WaitForComplete(%d), CS 0x%X, BLK 0x%X, DBG 0x%X", type, dma_reg[DMA_CS], dma_reg[DMA_CONBLK_AD], dma_reg[DMA_DEBUG]);
+		int x;
+		for (x=0; x< 20; x++)
+		{
+			if(!(dma_reg[DMA_CS] & DMA_CS_ACTIVE))	break;
 
+			//usleep(1);
+			DebugMessage(M64MSG_INFO, "%3d dma_WaitForComplete(%d), CS 0x%X, BLK 0x%X, TI 0x%X, SRC 0x%X, DST 0x%X, DBG 0x%X", 
+				x, type, dma_reg[DMA_CS], dma_reg[DMA_CONBLK_AD], dma_reg[DMA_TI], dma_reg[DMA_SRC], dma_reg[DMA_DEST], dma_reg[DMA_DEBUG]);
+			usleep(1);
+		}
+		dma_reg[DMA_CS] |= DMA_CS_END | DMA_CS_RESET;
+	}
 }
+#endif
 
 void dma_initialize()
 {
-	dmaMode = ConfigGetParamInt(g_CoreConfig, "DMA_MODE");
-
-	if (dmaMode)
+#ifdef M64P_ALLOCATE_MEMORY
+	if (2 == dmaMode)
 	{
 		dma_reg = map_peripheral(DMA_BASE, DMA_LEN);
 
 		if (!dma_reg)
 		{
-			dmaMode = 0;
-			DebugMessage(M64MSG_INFO, "DMA will be done by Software"); 
+			dmaMode = 1;
+			DebugMessage(M64MSG_INFO, "DMA will be done by Software Mode %d",dmaMode); 
 			return;
 		}
 
+		physical_cb_base = mem_virt_to_phys(cb_base);
+		cb_base->NEXTCONBK = 0;
+
 		//move DMA pointer to desired channel
-		dma_reg += dma_chan * DMA_CHAN_SIZE / sizeof(uint32_t);
+		dma_reg += dma_chan * DMA_CHAN_SIZE / sizeof(uint32_t);;
+
+		dma_reg[DMA_CS] |= DMA_CS_RESET;
+
+        usleep(10);
+
+		dma_reg[DMA_CS] |=  DMA_CS_INT | DMA_CS_END;
+		dma_reg[DMA_CONBLK_AD] = physical_cb_base;
+        dma_reg[DMA_DEBUG] = 7; // clear debug error flags
+        dma_reg[DMA_CS] = 0x10880001;        // go, mid priority, wait for outstanding writes
+
+		DebugMessage(M64MSG_INFO, "Hardware DMA Initialized. CB addr %p, CS 0x%X", physical_cb_base, dma_reg[DMA_CS]); 
 	}
+#endif
 }
+
+#ifdef M64P_ALLOCATE_MEMORY
+void dma_copy_multiple(void* from, void* to, uint32_t len, uint32_t skip, uint32_t loop)
+{
+	dma_WaitComplete(0);
+
+	cb_base->TI = DMA_TI_NO_WIDE_BURSTS | DMA_TI_WAIT_RESP | DMA_TI_DST_INC | DMA_TI_SRC_INC | DMA_TI_2D;
+ 	cb_base->SOURCE_AD = mem_virt_to_phys(from);
+	cb_base->DEST_AD = mem_virt_to_phys(to);
+	cb_base->LENGTH = loop << 16 + len;
+	cb_base->STRIDE = skip;
+
+	//start the transfer
+	dma_reg[DMA_CONBLK_AD] = physical_cb_base;
+	dma_reg[DMA_CS] |= DMA_CS_ACTIVE;
+
+}
+
+void dma_copy(void* from, void* to, uint32_t len)
+{
+	dma_WaitComplete(0);
+
+	//DebugMessage(M64MSG_INFO, "dma_copy() starting"); 
+
+	cb_base->TI = DMA_TI_NO_WIDE_BURSTS | DMA_TI_WAIT_RESP | DMA_TI_DST_INC | DMA_TI_SRC_INC;
+ 	cb_base->SOURCE_AD = mem_virt_to_phys(from);
+	cb_base->DEST_AD = mem_virt_to_phys(to);
+	cb_base->LENGTH = len;
+	cb_base->STRIDE = 0;
+
+	//start the transfer
+	dma_reg[DMA_CONBLK_AD] = (uint32_t)physical_cb_base;
+	dma_reg[DMA_CS] |= DMA_CS_ACTIVE;
+}
+#endif
 
 void dma_close(void)
 {
-	if (dma_reg && virtbase) 
+#ifdef M64P_ALLOCATE_MEMORY
+	if (2 == dmaMode && dma_reg && n64_memory)
 	{
-		dma_reg[DMA_CS] = DMA_RESET;
+		dma_reg[DMA_CS] |= DMA_CS_RESET;
     }
+#endif
 }
 
 static char *get_sram_path(void)
@@ -353,17 +348,41 @@ void dma_pi_read(void)
 
 			//PRINT_DMA_MSG(M64MSG_INFO, "DMA %d %d %x > %x", __LINE__, pi_register.pi_rd_len_reg & 0xFFFFFF, rdram, sram );
 
-#if MODE > 0
-			memcpy(&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], &rdram[pi_register.pi_dram_addr_reg], (pi_register.pi_rd_len_reg & 0xFFFFFF)+1);
+#if defined(M64P_ALLOCATE_MEMORY) && 0
+			if (2 == dmaMode)
+			{
+				DebugMessage(M64MSG_INFO, "dma_pi_read %p => %p (%d %d)", 
+					&rdram[pi_register.pi_dram_addr_reg], 
+					&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF],
+					rdram[pi_register.pi_dram_addr_reg], 
+					sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF]);
+
+				dma_copy(rdram[pi_register.pi_dram_addr_reg], &sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], (pi_register.pi_rd_len_reg & 0xFFFFFF)+1);
+				dma_WaitComplete(0);
+
+				DebugMessage(M64MSG_INFO, "dma_pi_read %p => %p (%d %d)", 
+					&rdram[pi_register.pi_dram_addr_reg], 
+					&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF],
+					rdram[pi_register.pi_dram_addr_reg], 
+					sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF]);
+			}
+			else if (1 == dmaMode)
 #else
-			unsigned int i;
-            for (i=0; i < (pi_register.pi_rd_len_reg & 0xFFFFFF)+1; i++)
-            {
-                sram[((pi_register.pi_cart_addr_reg-0x08000000)+i)^S8] =
-                    ((unsigned char*)rdram)[(pi_register.pi_dram_addr_reg+i)^S8];
-            }
+			if (dmaMode)
 #endif
-            sram_write_file();
+			{
+				memcpy(&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], &rdram[pi_register.pi_dram_addr_reg], (pi_register.pi_rd_len_reg & 0xFFFFFF)+1);
+			}
+			else
+			{
+				unsigned int i;
+		        for (i=0; i < (pi_register.pi_rd_len_reg & 0xFFFFFF)+1; i++)
+		        {
+		            sram[((pi_register.pi_cart_addr_reg-0x08000000)+i)^S8] =
+		                ((unsigned char*)rdram)[(pi_register.pi_dram_addr_reg+i)^S8];
+		        }
+			}
+			sram_write_file();
 
             flashram_info.use_flashram = -1;
         }
@@ -397,15 +416,39 @@ void dma_pi_write(void)
                 sram_read_file();
 
 				//PRINT_DMA_MSG(M64MSG_INFO, "DMA %d %d %x > %x", __LINE__, pi_register.pi_wr_len_reg & 0xFFFFFF, sram, rdram );
-#if MODE > 0
-				memcpy(&rdram[pi_register.pi_dram_addr_reg], &sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], (pi_register.pi_wr_len_reg & 0xFFFFFF)+1);
+#if defined(M64P_ALLOCATE_MEMORY) && 0
+				if (2 == dmaMode)
+				{
+					DebugMessage(M64MSG_INFO, "dma_pi_write %p => %p (%d %d)", 
+						&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], 
+						&rdram[pi_register.pi_dram_addr_reg],
+						sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], 
+						rdram[pi_register.pi_dram_addr_reg]);
+
+					dma_copy(&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], &rdram[pi_register.pi_dram_addr_reg], (pi_register.pi_wr_len_reg & 0xFFFFFF)+1);
+					dma_WaitComplete(0);
+
+					DebugMessage(M64MSG_INFO, "dma_pi_write %p => %p (%d %d)", 
+						&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], 
+						&rdram[pi_register.pi_dram_addr_reg],
+						sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], 
+						rdram[pi_register.pi_dram_addr_reg]);
+				}
+				else if (1 == dmaMode)
 #else
-                for (i=0; i<(int)(pi_register.pi_wr_len_reg & 0xFFFFFF)+1; i++)
-                {
-                    ((unsigned char*)rdram)[(pi_register.pi_dram_addr_reg+i)^S8]=
-                        sram[(((pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF)+i)^S8];
-                }
+				if (dmaMode)
 #endif
+				{
+					memcpy(&rdram[pi_register.pi_dram_addr_reg], &sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], (pi_register.pi_wr_len_reg & 0xFFFFFF)+1);
+				}
+				else
+				{
+		            for (i=0; i<(int)(pi_register.pi_wr_len_reg & 0xFFFFFF)+1; i++)
+		            {
+		                ((unsigned char*)rdram)[(pi_register.pi_dram_addr_reg+i)^S8]=
+		                    sram[(((pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF)+i)^S8];
+		            }
+				}
 
                 flashram_info.use_flashram = -1;
             }
@@ -461,73 +504,118 @@ void dma_pi_write(void)
         unsigned long rdram_address2 = pi_register.pi_dram_addr_reg+i+0xa0000000;
 
 		//PRINT_DMA_MSG(M64MSG_INFO, "dma.c:%d 0x%08X 0x%08X, longueur = %d", __LINE__, &((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], &rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur );
-        
-#if 1
-		memcpy(&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], &rom[((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)], longueur);
-		
-		if (!invalid_code[rdram_address1>>12])
-        {
-            if (!blocks[rdram_address1>>12] ||
-                blocks[rdram_address1>>12]->block[(rdram_address1&0xFFF)/4].ops !=
-                current_instruction_table.NOTCOMPILED)
-            {
-                invalid_code[rdram_address1>>12] = 1;
-            }
-	#ifdef NEW_DYNAREC
-            invalidate_block(rdram_address1>>12);
-	#endif
-        }
-        if (!invalid_code[rdram_address2>>12])
-        {
-            if (!blocks[rdram_address1>>12] ||
-                blocks[rdram_address2>>12]->block[(rdram_address2&0xFFF)/4].ops !=
-                current_instruction_table.NOTCOMPILED)
-            {
-                invalid_code[rdram_address2>>12] = 1;
-            }
-        }
-#else
-		for (i=0; i<(int)longueur; i++)
-        {            
-			((unsigned char*)rdram)[(pi_register.pi_dram_addr_reg+i)^S8]= rom[(((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)+i)^S8];
 
-            if (!invalid_code[rdram_address1>>12])
-            {
-                if (!blocks[rdram_address1>>12] ||
-                    blocks[rdram_address1>>12]->block[(rdram_address1&0xFFF)/4].ops !=
-                    current_instruction_table.NOTCOMPILED)
-                {
-                    invalid_code[rdram_address1>>12] = 1;
-                }
-#ifdef NEW_DYNAREC
-                invalidate_block(rdram_address1>>12);
+#if defined(M64P_ALLOCATE_MEMORY) && 0
+		if (2 == dmaMode)
+		{
+			DebugMessage(M64MSG_INFO, "dma_pi_write2 %p => %p (%d %d)", 
+					&rom[((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)], 
+					&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], 
+					rom[((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)], 
+					((unsigned char*)rdram)[pi_register.pi_dram_addr_reg]);
+
+			dma_copy(&rom[((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)], &((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], longueur);
+			dma_WaitComplete(0);
+
+			DebugMessage(M64MSG_INFO, "dma_pi_write2 %p => %p (%d %d)", 
+					&rom[((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)], 
+					&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], 
+					rom[((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)], 
+					((unsigned char*)rdram)[pi_register.pi_dram_addr_reg]);
+		}
+		else if (1 == dmaMode)
+#else
+		if (dmaMode)
 #endif
-            }
-            if (!invalid_code[rdram_address2>>12])
-            {
-                if (!blocks[rdram_address1>>12] ||
-                    blocks[rdram_address2>>12]->block[(rdram_address2&0xFFF)/4].ops !=
-                    current_instruction_table.NOTCOMPILED)
-                {
-                    invalid_code[rdram_address2>>12] = 1;
-                }
-            }
-        }
-#endif    
+		{
+			memcpy(&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], &rom[((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)], longueur);
+		
+			if (!invalid_code[rdram_address1>>12])
+		    {
+		        if (!blocks[rdram_address1>>12] ||
+		            blocks[rdram_address1>>12]->block[(rdram_address1&0xFFF)/4].ops !=
+		            current_instruction_table.NOTCOMPILED)
+		        {
+		            invalid_code[rdram_address1>>12] = 1;
+		        }
+		#ifdef NEW_DYNAREC
+		        invalidate_block(rdram_address1>>12);
+		#endif
+		    }
+		    if (!invalid_code[rdram_address2>>12])
+		    {
+		        if (!blocks[rdram_address1>>12] ||
+		            blocks[rdram_address2>>12]->block[(rdram_address2&0xFFF)/4].ops !=
+		            current_instruction_table.NOTCOMPILED)
+		        {
+		            invalid_code[rdram_address2>>12] = 1;
+		        }
+		    }
+		}else{
+			for (i=0; i<(int)longueur; i++)
+		    {            
+				((unsigned char*)rdram)[(pi_register.pi_dram_addr_reg+i)^S8]= rom[(((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)+i)^S8];
+
+		        if (!invalid_code[rdram_address1>>12])
+		        {
+		            if (!blocks[rdram_address1>>12] ||
+		                blocks[rdram_address1>>12]->block[(rdram_address1&0xFFF)/4].ops !=
+		                current_instruction_table.NOTCOMPILED)
+		            {
+		                invalid_code[rdram_address1>>12] = 1;
+		            }
+#ifdef NEW_DYNAREC
+                	invalidate_block(rdram_address1>>12);
+#endif
+		        }
+		        if (!invalid_code[rdram_address2>>12])
+		        {
+		            if (!blocks[rdram_address1>>12] ||
+		                blocks[rdram_address2>>12]->block[(rdram_address2&0xFFF)/4].ops !=
+		                current_instruction_table.NOTCOMPILED)
+		            {
+		                invalid_code[rdram_address2>>12] = 1;
+		            }
+		        }
+		    }
+		}   
 	}
     else
     {
+#if defined(M64P_ALLOCATE_MEMORY) && 0
+		if (2 == dmaMode)
+		{
+			DebugMessage(M64MSG_INFO, "dma_pi_write3 %p => %p (%d %d)", 
+					&rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], 
+					&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], 
+					rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], 
+					((unsigned char*)rdram)[pi_register.pi_dram_addr_reg]);
 
-#if MODE > 0 && 1
-		//PRINT_DMA_MSG(M64MSG_INFO, "dma.c:%d %X %X, longueur = %d", __LINE__, ((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur );
-		memcpy(&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], &rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur);
+			dma_copy(&rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], &((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], longueur);
+			dma_WaitComplete(0);
+
+			DebugMessage(M64MSG_INFO, "dma_pi_write3 %p => %p (%d %d)", 
+					&rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], 
+					&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], 
+					rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], 
+					((unsigned char*)rdram)[pi_register.pi_dram_addr_reg]);
+		}
+		else if (1 == dmaMode)
 #else
-		for (i=0; i<(int)longueur; i++)
-        {
-            ((unsigned char*)rdram)[(pi_register.pi_dram_addr_reg+i)^S8]=
-                rom[(((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)+i)^S8];
-        }
+		if (dmaMode)
 #endif
+		{
+			//PRINT_DMA_MSG(M64MSG_INFO, "dma.c:%d %X %X, longueur = %d", __LINE__, ((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur );
+			memcpy(&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], &rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur);
+		}
+		else
+		{
+			for (i=0; i<(int)longueur; i++)
+		    {
+		        ((unsigned char*)rdram)[(pi_register.pi_dram_addr_reg+i)^S8]=
+		            rom[(((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)+i)^S8];
+		    }
+		}
     }
 
     // Set the RDRAM memory size when copying main ROM code
@@ -589,29 +677,40 @@ void dma_sp_write(void)
 
 	//PRINT_DMA_MSG(M64MSG_INFO, "DMA:%d, %x << %x, len=%d, count=%d, skip=%d", __LINE__, &spmem[memaddr], &dram[dramaddr], length, count, skip);
 
-#if !defined(NO_ASM) && defined(ARM) && MODE > 1
-	dma_copy(&spmem[memaddr], &dram[dramaddr], length, count, skip);
-#elif MODE > 0
-	unsigned int j;
-	for(j=0; j<count; j++) 
+#ifdef M64P_ALLOCATE_MEMORY
+	if (2 == dmaMode)
 	{
-		memcpy(&spmem[memaddr], &dram[dramaddr], length);
-		memaddr += length;
-		dramaddr += length + skip;
-    }
-#else
-    unsigned int i,j;
-    for(j=0; j<count; j++)
-	{
-        for(i=0; i<length; i++)
-		{
-            spmem[memaddr^S8] = dram[dramaddr^S8];
-            memaddr++;
-            dramaddr++;
-        }
-        dramaddr+=skip;
-    }
+		//DebugMessage(M64MSG_INFO, "dma_sp_write %p => %p (%d %d)", &dram[dramaddr], &spmem[memaddr], *(int*)&dram[dramaddr], *(int*)&spmem[memaddr]);
+		dma_copy_multiple(&dram[dramaddr], &spmem[memaddr], length,skip, count);
+		//dma_WaitComplete(0);
+		//DebugMessage(M64MSG_INFO, "dma_sp_write %p => %p (%d %d)\n", &dram[dramaddr], &spmem[memaddr], *(int*)&dram[dramaddr], *(int*)&spmem[memaddr]);
+		return;
+	}
 #endif
+	if (dmaMode)
+	{
+		unsigned int j;
+		for(j=0; j<count; j++) 
+		{
+			memcpy(&spmem[memaddr], &dram[dramaddr], length);
+			memaddr += length;
+			dramaddr += length + skip;
+		}
+	}
+	else
+	{
+		unsigned int i,j;
+		for(j=0; j<count; j++)
+		{
+			for(i=0; i<length; i++)
+			{
+			    spmem[memaddr^S8] = dram[dramaddr^S8];
+			    memaddr++;
+			    dramaddr++;
+			}
+			dramaddr+=skip;
+		}
+	}
 }
 
 void dma_sp_read(void)
@@ -630,26 +729,39 @@ void dma_sp_read(void)
 
 	//PRINT_DMA_MSG(M64MSG_INFO, "DMA:%d, %x << %x, len=%d, count=%d, skip=%d", __LINE__, &spmem[memaddr], &dram[dramaddr], length, count, skip);
 
-#if !defined(NO_ASM) && defined(ARM) && MODE > 1
-	dma_copy(&dram[dramaddr],  &spmem[memaddr], length, count, skip);
-#elif MODE > 0
-    unsigned int j;
-    	for(j=0; j<count; j++) {
-		memcpy(&dram[dramaddr], &spmem[memaddr], length);
-		memaddr += length;
-		dramaddr += length + skip;
-    }
-#else
-    unsigned int i,j;
-        for(j=0; j<count; j++) {
-        for(i=0; i<length; i++) {
-            dram[dramaddr^S8] = spmem[memaddr^S8];
-            memaddr++;
-            dramaddr++;
-        }
-        dramaddr+=skip;
-    }
+#ifdef M64P_ALLOCATE_MEMORY
+	if (2 == dmaMode)
+	{
+		//DebugMessage(M64MSG_INFO, "dma_sp_read 0x%x => 0x%x", *(int*)&spmem[memaddr], *(int*)&dram[dramaddr]);
+		dma_copy_multiple(&spmem[memaddr], &dram[dramaddr], length, skip, count);
+		//dma_WaitComplete(0);
+		//DebugMessage(M64MSG_INFO, "dma_sp_read 0x%x => 0x%x", *(int*)&spmem[memaddr], *(int*)&dram[dramaddr]);
+		return;
+	}
 #endif
+	if (dmaMode)
+	{
+		unsigned int j;
+		for(j=0; j<count; j++) 
+		{
+			memcpy(&dram[dramaddr], &spmem[memaddr], length);
+			memaddr += length;
+			dramaddr += length + skip;
+		}
+	}
+	else
+	{
+
+		unsigned int i,j;
+		    for(j=0; j<count; j++) {
+		    for(i=0; i<length; i++) {
+		        dram[dramaddr^S8] = spmem[memaddr^S8];
+		        memaddr++;
+		        dramaddr++;
+		    }
+		    dramaddr+=skip;
+		}
+	}
 }
 
 void dma_si_write(void)

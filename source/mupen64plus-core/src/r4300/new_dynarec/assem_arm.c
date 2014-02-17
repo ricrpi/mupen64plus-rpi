@@ -30,6 +30,7 @@ extern void *dynarec_local;
 extern u_int memory_map[1048576];
 extern u_int mini_ht[32][2];
 extern u_int rounding_modes[4];
+extern void *base_addr;
 
 static u_int literals[1024][2];
 
@@ -997,7 +998,7 @@ static u_int genjmp(u_int addr)
     {
       if(addr==jump_table_symbols[n])
       {
-        offset=BASE_ADDR+(1<<TARGET_SIZE_2)-JUMP_TABLE_SIZE+n*8-(int)out-8;
+        offset=(int)base_addr+(1<<TARGET_SIZE_2)-JUMP_TABLE_SIZE+n*8-(int)out-8;
         break;
       }
     }
@@ -4502,7 +4503,7 @@ static void do_clear_cache()
       for(j=0;j<32;j++) 
       {
         if(bitmap&(1<<j)) {
-          start=BASE_ADDR+i*131072+j*4096;
+          start=(int)base_addr+i*131072+j*4096;
           end=start+4095;
           j++;
           while(j<32) {
@@ -4541,7 +4542,7 @@ static void arch_init() {
   // Trampolines for jumps >32M
   int *ptr,*ptr2;
   ptr=(int *)jump_table_symbols;
-  ptr2=(int *)((void *)BASE_ADDR+(1<<TARGET_SIZE_2)-JUMP_TABLE_SIZE);
+  ptr2=(int *)((void *)(int)base_addr+(1<<TARGET_SIZE_2)-JUMP_TABLE_SIZE);
   while((void *)ptr<(void *)jump_table_symbols+sizeof(jump_table_symbols))
   {
     int offset=*ptr-(int)ptr2-8;
@@ -4559,10 +4560,11 @@ static void arch_init() {
   // Jumping thru the trampolines created above slows things down by about 1%.
   // If part of the cache is beyond the 32M limit, avoid using this area
   // initially.  It will be used later if the cache gets full.
-  if((u_int)dyna_linker-33554432>(u_int)BASE_ADDR) {
-    if((u_int)dyna_linker-33554432<(u_int)BASE_ADDR+(1<<(TARGET_SIZE_2-1))) {
-      out=(u_char *)(((u_int)dyna_linker-33554432)&~4095);
-      expirep=((((int)out-BASE_ADDR)>>(TARGET_SIZE_2-16))+16384)&65535;
+  if((u_int)dyna_linker-33554432-4096>(u_int)(int)base_addr) {
+    if((u_int)dyna_linker-33554432-4096<(u_int)(int)base_addr+(1<<(TARGET_SIZE_2-1))) {
+      out=(u_char *)(((u_int)dyna_linker-33554432-4096)&~4095);
+      expirep=((((int)out-(int)base_addr)>>(TARGET_SIZE_2-16))+16384)&65535;
+	  
     }
   }
 }
