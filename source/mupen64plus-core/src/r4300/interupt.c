@@ -115,7 +115,7 @@ static void queue_free(interupt_queue *qToFree)
 	{
 		free(qToFree); //must be a non-stack memory allocation
  		return;
-	}	
+	}
 	/*if (qstackindex == 0 ) // should never happen
 	{
 		DebugMessage(M64MSG_ERROR, "Nothing to free");
@@ -650,12 +650,12 @@ X11_PumpEvents();
 
         case COMPARE_INT:
             remove_interupt_event();
-            
+
 #ifdef USE_COMPARE
 			Count+=2;
             add_interupt_event_count(COMPARE_INT, Compare);
 			Count-=2;
-#endif       
+#endif
             Cause = (Cause | 0x8000) & 0xFFFFFF83;
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
@@ -666,13 +666,13 @@ X11_PumpEvents();
             break;
 
         case SI_INT:
-			if (2 == dmaMode) dma_WaitComplete(SI_INT); //TODO not Implemented
+			//if (2 == dmaMode) dma_WaitComplete(SI_INT); //SI can't use DMA as need to swap bytes
 #ifdef WITH_LIRC
             lircCheckInput();
 #endif //WITH_LIRC
             SDL_PumpEvents();
             X11_PumpEvents();
-	    PIF_RAMb[0x3F] = 0x0;
+	    	PIF_RAMb[0x3F] = 0x0;
             remove_interupt_event();
             MI_register.mi_intr_reg |= 0x02;
             si_register.si_stat |= 0x1000;
@@ -685,8 +685,8 @@ X11_PumpEvents();
             break;
         case PI_INT:
             remove_interupt_event();
-#ifdef M64P_ALLOCATE_MEMORY && 0
-			//if (2 == dmaMode) dma_WaitComplete(PI_INT);
+#ifdef M64P_ALLOCATE_MEMORY 
+			if (2 == dmaMode) dma_WaitComplete(PI_INT);
 #endif
             MI_register.mi_intr_reg |= 0x10;
             pi_register.read_pi_status_reg &= ~3;
@@ -740,7 +740,7 @@ X11_PumpEvents();
 #endif
             sp_register.sp_status_reg |= 0x203;
             // sp_register.sp_status_reg |= 0x303;
-    
+
             if (!(sp_register.sp_status_reg & 0x40)) return; // !intr_on_break
             MI_register.mi_intr_reg |= 0x01;
             if (MI_register.mi_intr_reg & MI_register.mi_intr_mask_reg)
@@ -750,7 +750,7 @@ X11_PumpEvents();
             if ((Status & 7) != 1) return;
             if (!(Status & Cause & 0xFF00)) return;
             break;
-    
+
         case DP_INT:
             remove_interupt_event();
             dpc_register.dpc_status &= ~2;

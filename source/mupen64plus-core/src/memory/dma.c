@@ -51,7 +51,7 @@
 
 //---------------------------------------------
 
-#define PRINT_DMA_MSG(...) DebugMessage(__VA_ARGS__)
+#define PRINT_DMA_MSG(...) 		DebugMessage(__VA_ARGS__)
 
 #ifndef PRINT_DMA_MSG
 #define PRINT_DMA_MSG(...)
@@ -70,15 +70,15 @@
 
 #define DMA_LEN                 DMA_CHAN_SIZE * (DMA_CHAN_MAX+1)
 
-#define DMA_CS 		(0x00/4)
-#define DMA_CONBLK_AD 	(0x04/4)
-#define DMA_TI 		(0x08/4)
-#define DMA_SRC 	(0x0C/4)
-#define DMA_DEST 	(0x10/4)
-#define DMA_TLEN 	(0x14/4)
-#define DMA_STRIDE	(0x18/4)
-#define DMA_NEXT	(0x1C/4)
-#define DMA_DEBUG 	(0x20/4)
+#define DMA_CS 					(0x00/4)
+#define DMA_CONBLK_AD 			(0x04/4)
+#define DMA_TI 					(0x08/4)
+#define DMA_SRC 				(0x0C/4)
+#define DMA_DEST 				(0x10/4)
+#define DMA_TLEN 				(0x14/4)
+#define DMA_STRIDE				(0x18/4)
+#define DMA_NEXT				(0x1C/4)
+#define DMA_DEBUG 				(0x20/4)
 
 #define DMA_TI_NO_WIDE_BURSTS 					(1<<26)
 #define DMA_TI_D_DREQ 							(0x00000040)
@@ -119,16 +119,13 @@
 #define DMA_DBG_FIFO_ERROR						(0x00000002)
 #define DMA_DBG_READ_LAST_NOT_SET_ERROR			(0x00000001)
 
-unsigned char* sram;
-unsigned int dmaMode = 0;
+unsigned char* 				sram;
+unsigned int 				dmaMode 	= 0;
+dma_cb_t*					cb_base;
 
-static volatile uint32_t* dma_reg = NULL;
-
-static int dma_chan = DMA_CHAN_DEFAULT;
-
-dma_cb_t *cb_base;
-
-static uint32_t physical_cb_base;
+static volatile uint32_t* 	dma_reg 	= NULL;
+static int 					dma_chan 	= DMA_CHAN_DEFAULT;
+static uint32_t 			physical_cb_base;
 //----------------------------------------------
 
 #ifdef M64P_ALLOCATE_MEMORY
@@ -138,23 +135,18 @@ static uint32_t mem_virt_to_phys(void *virt)
 	{
        	uint32_t offset = (uint8_t *)virt - n64_memory;
 
-		if (offset >= (uint32_t)cb_base)	//cb_base is the last region in the mmap'ed space
+		if (virt > (void*)cb_base || virt < (void*)n64_memory)	//cb_base is the last region in the mmap'ed space
 		{
 			DebugMessage(M64MSG_ERROR, "DMA invalid location %p, offset %d, page %d", virt, offset, (offset >> PAGE_SHIFT));
 			return 0;
 		}
 
-//		DebugMessage(M64MSG_INFO, "mem_virt_to_phys(%p), offset 0x%8x, page %4d, p addr 0x%8x", virt, offset, (offset >> PAGE_SHIFT), n64_memory_map[offset >> PAGE_SHIFT].physaddr + (offset % PAGE_SIZE));
+		//DebugMessage(M64MSG_INFO, "mem_virt_to_phys(%p), offset 0x%8x, page %4d, p addr 0x%8x", virt, offset, (offset >> PAGE_SHIFT), n64_memory_map[offset >> PAGE_SHIFT].physaddr + (offset % PAGE_SIZE));
     	return n64_memory_map[offset >> PAGE_SHIFT].physaddr + (offset % PAGE_SIZE);
 	}
 
 	DebugMessage(M64MSG_ERROR, "mem_virt_to_phys(0)");
 	return 0;
-}
-
-static uint32_t CanDoHwTransfer(void* a1, void* a2)
-{
-	return (((a1 - (void*)n64_memory) >> PAGE_SHIFT) == ((a2 - (void*)n64_memory) >> PAGE_SHIFT));
 }
 #endif
 
@@ -227,7 +219,7 @@ void dma_initialize()
 		cb_base->NEXTCONBK = 0;
 
 		//move DMA pointer to desired channel
-		dma_reg += dma_chan * DMA_CHAN_SIZE / sizeof(uint32_t);;
+		dma_reg += dma_chan * DMA_CHAN_SIZE / sizeof(uint32_t);
 
 		dma_reg[DMA_CS] |= DMA_CS_RESET;
 
@@ -251,20 +243,26 @@ void dma_copy_multiple(void* from, void* to, uint32_t len, uint32_t skip, uint32
 	cb_base->TI = DMA_TI_NO_WIDE_BURSTS | DMA_TI_WAIT_RESP | DMA_TI_DST_INC | DMA_TI_SRC_INC | DMA_TI_2D;
  	cb_base->SOURCE_AD = mem_virt_to_phys(from);
 	cb_base->DEST_AD = mem_virt_to_phys(to);
-	cb_base->LENGTH = loop << 16 + len;
+	cb_base->LENGTH = (loop << 16) + len;
 	cb_base->STRIDE = skip;
 
-	//start the transfer
-	dma_reg[DMA_CONBLK_AD] = physical_cb_base;
-	dma_reg[DMA_CS] |= DMA_CS_ACTIVE;
-
+	if (cb_base->SOURCE_AD && cb_base->DEST_AD && cb_base->LENGTH)
+	{
+		//start the transfer
+		dma_reg[DMA_CONBLK_AD] = (uint32_t)physical_cb_base;
+		dma_reg[DMA_CS] |= DMA_CS_ACTIVE;
+	}
+	else
+	{
+		DebugMessage(M64MSG_ERROR, "DMA error: 0x%X to 0x%X len %d",cb_base->SOURCE_AD, cb_base->DEST_AD, cb_base->LENGTH);	
+	}
 }
 
 void dma_copy(void* from, void* to, uint32_t len)
 {
 	dma_WaitComplete(0);
 
-	//DebugMessage(M64MSG_INFO, "dma_copy() starting"); 
+	DebugMessage(M64MSG_INFO, "dma_copy() starting"); 
 
 	cb_base->TI = DMA_TI_NO_WIDE_BURSTS | DMA_TI_WAIT_RESP | DMA_TI_DST_INC | DMA_TI_SRC_INC;
  	cb_base->SOURCE_AD = mem_virt_to_phys(from);
@@ -272,9 +270,16 @@ void dma_copy(void* from, void* to, uint32_t len)
 	cb_base->LENGTH = len;
 	cb_base->STRIDE = 0;
 
-	//start the transfer
-	dma_reg[DMA_CONBLK_AD] = (uint32_t)physical_cb_base;
-	dma_reg[DMA_CS] |= DMA_CS_ACTIVE;
+	if (cb_base->SOURCE_AD && cb_base->DEST_AD && cb_base->LENGTH)
+	{
+		//start the transfer
+		dma_reg[DMA_CONBLK_AD] = (uint32_t)physical_cb_base;
+		dma_reg[DMA_CS] |= DMA_CS_ACTIVE;
+	}
+	else
+	{
+		DebugMessage(M64MSG_ERROR, "DMA error: 0x%X to 0x%X len %d",cb_base->SOURCE_AD, cb_base->DEST_AD, cb_base->LENGTH);	
+	}
 }
 #endif
 
@@ -357,14 +362,13 @@ void dma_pi_read(void)
 					rdram[pi_register.pi_dram_addr_reg], 
 					sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF]);
 
-				dma_copy(rdram[pi_register.pi_dram_addr_reg], &sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], (pi_register.pi_rd_len_reg & 0xFFFFFF)+1);
-				dma_WaitComplete(0);
-
-				DebugMessage(M64MSG_INFO, "dma_pi_read %p => %p (%d %d)", 
+				dma_copy(&rdram[pi_register.pi_dram_addr_reg], &sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], (pi_register.pi_rd_len_reg & 0xFFFFFF)+1);
+				
+				/*DebugMessage(M64MSG_INFO, "dma_pi_read %p => %p (%d %d)", 
 					&rdram[pi_register.pi_dram_addr_reg], 
 					&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF],
 					rdram[pi_register.pi_dram_addr_reg], 
-					sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF]);
+					sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF]);*/
 			}
 			else if (1 == dmaMode)
 #else
@@ -416,7 +420,7 @@ void dma_pi_write(void)
                 sram_read_file();
 
 				//PRINT_DMA_MSG(M64MSG_INFO, "DMA %d %d %x > %x", __LINE__, pi_register.pi_wr_len_reg & 0xFFFFFF, sram, rdram );
-#if defined(M64P_ALLOCATE_MEMORY) && 0
+#if defined(M64P_ALLOCATE_MEMORY)  && 0
 				if (2 == dmaMode)
 				{
 					DebugMessage(M64MSG_INFO, "dma_pi_write %p => %p (%d %d)", 
@@ -426,13 +430,12 @@ void dma_pi_write(void)
 						rdram[pi_register.pi_dram_addr_reg]);
 
 					dma_copy(&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], &rdram[pi_register.pi_dram_addr_reg], (pi_register.pi_wr_len_reg & 0xFFFFFF)+1);
-					dma_WaitComplete(0);
 
-					DebugMessage(M64MSG_INFO, "dma_pi_write %p => %p (%d %d)", 
+					/*DebugMessage(M64MSG_INFO, "dma_pi_write %p => %p (%d %d)", 
 						&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], 
 						&rdram[pi_register.pi_dram_addr_reg],
 						sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], 
-						rdram[pi_register.pi_dram_addr_reg]);
+						rdram[pi_register.pi_dram_addr_reg]);*/
 				}
 				else if (1 == dmaMode)
 #else

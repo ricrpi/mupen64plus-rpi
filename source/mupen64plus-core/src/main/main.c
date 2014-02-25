@@ -1039,6 +1039,8 @@ m64p_error main_run(void)
         osd_exit();
     }
 
+	DebugMessage(M64MSG_INFO, "run time %d", SDL_GetTicks());
+
     rsp.romClosed();
     input.romClosed();
     audio.romClosed();
