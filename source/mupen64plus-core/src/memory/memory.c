@@ -29,7 +29,10 @@
 #include <sys/mman.h>
 #endif
 
+#define M64P_CORE_PROTOTYPES 1
 #include "api/m64p_types.h"
+#include "api/callbacks.h"
+#include "api/m64p_config.h"
 
 #include "memory.h"
 #include "dma.h"
@@ -42,7 +45,6 @@
 #include "r4300/recomph.h"
 #include "r4300/ops.h"
 
-#include "api/callbacks.h"
 #include "main/main.h"
 #include "main/rom.h"
 #include "osal/preproc.h"
@@ -54,6 +56,13 @@
 #include "debugger/dbg_memory.h"
 #include "debugger/dbg_breakpoints.h"
 #endif
+
+#include <sys/mman.h>	// mmap()
+#include <fcntl.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdint.h> //uint32_t etc
 
 /* definitions of the rcp's structures and memory area */
 RDRAM_register rdram_register;
@@ -146,6 +155,187 @@ static int firstFrameBufferSetting;
 #if defined( COUNT_WRITE_RDRAM_CALLS )
 	int writerdram_count = 1;
 #endif
+
+volatile unsigned char* n64_memory = MAP_FAILED;
+
+#ifdef M64P_ALLOCATE_MEMORY
+static char * virtcached;
+static unsigned int num_pages;
+
+page_map_t* n64_memory_map;
+
+static void make_pagemap(void)
+{
+    int i,j, fd, memfd, pid;
+    char pagemap_fn[64];
+
+	DebugMessage(M64MSG_VERBOSE, "make_pagemap()");
+
+	n64_memory_map = malloc(num_pages* sizeof(page_map_t) );
+    if (n64_memory_map == 0)
+            DebugMessage(M64MSG_ERROR, "Failed to malloc page_map: %m\n");
+    memfd = open("/dev/mem", O_RDWR);
+    if (memfd < 0)
+            DebugMessage(M64MSG_ERROR, "Failed to open /dev/mem: %m\n");
+    pid = getpid();
+    sprintf(pagemap_fn, "/proc/%d/pagemap", pid);
+    fd = open(pagemap_fn, O_RDONLY);
+    if (fd < 0)
+            DebugMessage(M64MSG_ERROR, "Failed to open %s: %m\n", pagemap_fn);
+    if (lseek(fd, (uint32_t)(size_t)virtcached >> 9, SEEK_SET) !=
+                                            (uint32_t)(size_t)virtcached >> 9) {
+            DebugMessage(M64MSG_ERROR, "Failed to seek on %s: %m\n", pagemap_fn);
+    }
+    for (i = 0; i < num_pages; i++) 
+	{
+        uint64_t pfn;
+        if (read(fd, &pfn, sizeof(pfn)) != sizeof(pfn)) DebugMessage(M64MSG_ERROR, "Failed to read %s: %m\n", pagemap_fn);
+        if (((pfn >> 55) & 0x1bf) != 0x10c) 			DebugMessage(M64MSG_ERROR, "Page %d not present (pfn 0x%016llx)\n", i, pfn);
+        
+		n64_memory_map[i].physaddr = (uint32_t)pfn << PAGE_SHIFT | 0x40000000;
+		n64_memory_map[i].numContiguous = 0;
+	
+		//record if last pages preceed this one in physical memory 
+		if (i > 0 && n64_memory_map[i-1].physaddr + PAGE_SIZE == n64_memory_map[i].physaddr)
+		{ 
+			n64_memory_map[i-1].numContiguous = 1;
+			j = i - 1;
+			while (j > 0)
+			{
+				j--;
+				if (n64_memory_map[j].numContiguous)		//this will be 0 if the next blocks physical memory is not contiguous
+					n64_memory_map[j].numContiguous++;
+				else break; 				
+			}
+		}    
+
+		if ( i<10 || i%1000 == 0 || i == num_pages-1) DebugMessage(M64MSG_VERBOSE, "DMA %4d, p addr 0x%X, v addr 0x%X",i, n64_memory_map[i].physaddr, n64_memory + i * PAGE_SIZE); 
+
+		if (mmap((unsigned char*)n64_memory + i * PAGE_SIZE, PAGE_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_SHARED|MAP_FIXED|MAP_LOCKED|MAP_NORESERVE,
+                memfd, (uint32_t)pfn << PAGE_SHIFT | 0x40000000) != n64_memory + i * PAGE_SIZE) 
+		{
+			DebugMessage(M64MSG_ERROR, "Failed to create uncached map of page %d at %p\n", i, n64_memory + i * PAGE_SIZE);
+			break;
+        }
+    }
+
+    close(fd);
+    close(memfd);
+
+#if 1
+	for (i=0; i < 1; i++)
+	{
+		DebugMessage(M64MSG_VERBOSE, "map %4d %p %d", i, n64_memory_map[i].physaddr, n64_memory_map[i].numContiguous);
+	}
+#endif
+
+	DebugMessage(M64MSG_VERBOSE, "Allocated N64 memory"); 
+}
+#endif
+
+int Allocate_Memory(unsigned int rom_size, void** rom_mem)
+{
+	#ifdef M64P_ALLOCATE_MEMORY
+
+	dmaMode = ConfigGetParamInt(g_CoreConfig, "DMA_MODE");
+	
+	num_pages = ( (M64P_MEMORY_SIZE + rom_size + (PAGE_SIZE-1)) >> PAGE_SHIFT) + 32 + 1;
+	
+	if (2==dmaMode)
+	{
+		virtcached = mmap(NULL, num_pages * PAGE_SIZE, PROT_READ|PROT_WRITE,MAP_SHARED|MAP_ANONYMOUS|MAP_NORESERVE|MAP_LOCKED, -1, 0);
+
+		if (virtcached == MAP_FAILED) 					DebugMessage(M64MSG_ERROR, "Failed to mmap for cached pages: %m\n");
+
+		if ((unsigned long)virtcached & (PAGE_SIZE-1))
+		{
+				DebugMessage(M64MSG_ERROR, "virtcached is not page aligned\n");
+				virtcached = (char*)(((unsigned long)virtcached & ~(PAGE_SIZE-1)) + PAGE_SIZE);	//align virtcached
+		}            	
+
+		//force linux to allocate
+		memset(virtcached, 0, num_pages * PAGE_SIZE);
+		
+		n64_memory = mmap(NULL, num_pages * PAGE_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS|MAP_NORESERVE|MAP_LOCKED, -1, 0);
+	}
+	else
+	{
+		n64_memory = mmap(NULL, num_pages * PAGE_SIZE, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE|MAP_LOCKED, -1, 0);
+	}
+
+	if (n64_memory == MAP_FAILED) 					DebugMessage(M64MSG_ERROR, "Failed to mmap for n64_memory pages (%d): %m\n", num_pages);		
+	else
+	{
+		if ((unsigned long)n64_memory & (PAGE_SIZE-1)){
+			DebugMessage(M64MSG_ERROR, "n64_memory is not page aligned\n");
+			n64_memory = (unsigned char*)(((unsigned long)n64_memory & ~(PAGE_SIZE-1)) + PAGE_SIZE);	//align n64_memory
+		}  
+  		
+		sram = (unsigned char*)n64_memory;
+
+		if (2==dmaMode)
+		{ 
+			make_pagemap();
+
+			if (n64_memory_map[0].numContiguous < 8)
+				sram = (unsigned char*)((unsigned int)n64_memory + n64_memory_map[0].numContiguous * PAGE_SIZE + PAGE_SIZE);
+		}
+		
+		SP_DMEM = (unsigned int*)(sram + 0x8000);
+		SP_IMEM = SP_DMEM + 0x1000/4;
+		PIF_RAM = SP_IMEM + 0x1000/4;
+		rdram   = (unsigned int*)(PIF_RAM + 0x40/4); //*rom_mem + rom_size;
+		*rom_mem = (void*)(rdram + 0x800000/4);	
+
+		cb_base = (dma_cb_t*)(((unsigned int)*rom_mem + rom_size + 0xff)&~0xff);
+		
+		rdramb = 	(unsigned char *)(rdram);
+		SP_DMEMb = 	(unsigned char *)(SP_DMEM);
+		SP_IMEMb = 	(unsigned char *)(SP_IMEM);
+		PIF_RAMb = 	(unsigned char *)(PIF_RAM);
+
+		DebugMessage(M64MSG_VERBOSE, 
+			"\t\tvirtcached   %p\n"
+			"\t\tnum_pages    %10d, %d bytes\n"
+			"\t\tn64_memory   %p to %p\n"
+			"\t\tsram         %p, %d bytes\n"
+			"\t\tSP_DMEM      %p\n"
+			"\t\tPIF_RAM      %p\n"
+			"\t\trdram        %p, 0x%x\n"
+			"\t\trom_mem      %p, %d bytes\n"
+			"\t\tcb_base      %p\n"
+			
+			, virtcached
+			, num_pages, M64P_MEMORY_SIZE
+			, n64_memory, n64_memory + num_pages * PAGE_SIZE
+			, sram, 0x8000  
+			, SP_DMEM
+			, PIF_RAM 
+			, rdram, ((uint32_t)*rom_mem - (uint32_t)rdram)
+			, *rom_mem, rom_size 
+			, cb_base
+			);
+
+		
+	}	
+	#else
+	*rom_mem = malloc(rom_size);
+	rdramb = 	(unsigned char *)(rdram);
+	SP_DMEMb = 	(unsigned char *)(SP_DMEM);
+	SP_IMEMb = 	(unsigned char *)(SP_IMEM);
+	PIF_RAMb = 	(unsigned char *)(PIF_RAM);
+
+	DebugMessage(M64MSG_VERBOSE, 
+		"\t\trom          %p\n"
+		"\t\trdram        %p\n"
+		"\t\tSP_DMEM      %p\n"
+		"\t\tPIF_RAM      %p\n"
+		"\t\tsram         %p\n"
+		,*rom_mem, rdram, SP_DMEM, PIF_RAM, sram);
+	#endif
+
+	return 0;
+}
 
 int init_memory(int DoByteSwap)
 {

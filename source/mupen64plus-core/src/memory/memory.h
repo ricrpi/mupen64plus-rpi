@@ -42,7 +42,7 @@ void free_memory(void);
 
 typedef struct {
         unsigned int physaddr;
-		unsigned int bNextAligned;
+		unsigned int numContiguous;
 } page_map_t;
 
 // The CB is copied by the dma controller into its own registers
@@ -78,6 +78,8 @@ extern unsigned char *rdramb;
 	 
 	#define M64P_MEMORY_SIZE (0x800000 + 0x1000*2 + 0x40 + 0x8000 + 4096)
 #endif
+
+extern int Allocate_Memory(unsigned int rom_size, void** rom_mem);
 
 
 extern unsigned int address, word;

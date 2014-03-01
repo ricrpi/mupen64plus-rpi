@@ -25,6 +25,7 @@
 #include <stdint.h>		// types
 #include <unistd.h>		// usleep()
 #include <sys/mman.h>	// mmap()
+#include <sys/time.h>	// gettimeofday() for debug
 #include <fcntl.h>
 
 #include "api/m64p_types.h"
@@ -119,6 +120,31 @@
 #define DMA_DBG_FIFO_ERROR						(0x00000002)
 #define DMA_DBG_READ_LAST_NOT_SET_ERROR			(0x00000001)
 
+//----------------------------------------------
+
+/*
+Switching off DMA_CHECKING could be dangerous as it may be possible for a game to write into physical memory not used by the emulator (including at 0x0!).
+Pages are often grouped together in 32's but this will not cover rdram space
+
+On a Bare-metal system it should be possible to switch checking off as we would have control of the whole memory.
+
++---------+---------+-------+
+| memory  |   Bytes | Pages |
++---------+---------+-------+
+| rdram   | 2097152 |   512 | 
+| SP_DMEM |    1280 |    <1 |
+| PIF     |      16 |    <1 |
+| sram    |   32768 |     8 |
+| rom	  |       ? |     ? |
++---------+---------+-------+
+*/
+
+#define DMA_CHECKING				// must be defined with linux!
+//#define DMA_TIMING				// print time to perform DMA (SW copy / HW Setup Overhead)
+#define DMA_SW_THRESHOLD	1000	// used to revert to SW copying when data is small (and avoid DMA overhead)
+
+//----------------------------------------------
+
 unsigned char* 				sram;
 unsigned int 				dmaMode 	= 0;
 dma_cb_t*					cb_base;
@@ -129,24 +155,27 @@ static uint32_t 			physical_cb_base;
 //----------------------------------------------
 
 #ifdef M64P_ALLOCATE_MEMORY
+
+#ifdef DMA_CHECKING
+static uint32_t mem_virt_to_phys(void *virt, uint32_t*numContiguous)
+#else
 static uint32_t mem_virt_to_phys(void *virt)
+#endif
 {
-	if (virt)
+   	uint32_t offset = (uint8_t *)virt - n64_memory;
+
+#ifdef DMA_CHECKING
+	if (virt > (void*)cb_base || virt < (void*)n64_memory)	//cb_base is the last region in the mmap'ed space
 	{
-       	uint32_t offset = (uint8_t *)virt - n64_memory;
 
-		if (virt > (void*)cb_base || virt < (void*)n64_memory)	//cb_base is the last region in the mmap'ed space
-		{
-			DebugMessage(M64MSG_ERROR, "DMA invalid location %p, offset %d, page %d", virt, offset, (offset >> PAGE_SHIFT));
-			return 0;
-		}
-
-		//DebugMessage(M64MSG_INFO, "mem_virt_to_phys(%p), offset 0x%8x, page %4d, p addr 0x%8x", virt, offset, (offset >> PAGE_SHIFT), n64_memory_map[offset >> PAGE_SHIFT].physaddr + (offset % PAGE_SIZE));
-    	return n64_memory_map[offset >> PAGE_SHIFT].physaddr + (offset % PAGE_SIZE);
+		DebugMessage(M64MSG_ERROR, "DMA invalid location %p, offset %d, page %d", virt, offset, (offset >> PAGE_SHIFT));
+		*numContiguous = 0;
+		return 0;
 	}
-
-	DebugMessage(M64MSG_ERROR, "mem_virt_to_phys(0)");
-	return 0;
+	if (numContiguous) *numContiguous = n64_memory_map[offset >> PAGE_SHIFT].numContiguous;
+#endif
+	
+	return n64_memory_map[offset >> PAGE_SHIFT].physaddr + (offset & ~(PAGE_SIZE-1));
 }
 #endif
 
@@ -190,10 +219,10 @@ void dma_WaitComplete(unsigned int type)
 		for (x=0; x< 20; x++)
 		{
 			if(!(dma_reg[DMA_CS] & DMA_CS_ACTIVE))	break;
-
-			//usleep(1);
+#if 0
 			DebugMessage(M64MSG_INFO, "%3d dma_WaitForComplete(%d), CS 0x%X, BLK 0x%X, TI 0x%X, SRC 0x%X, DST 0x%X, DBG 0x%X", 
 				x, type, dma_reg[DMA_CS], dma_reg[DMA_CONBLK_AD], dma_reg[DMA_TI], dma_reg[DMA_SRC], dma_reg[DMA_DEST], dma_reg[DMA_DEBUG]);
+#endif
 			usleep(1);
 		}
 		dma_reg[DMA_CS] |= DMA_CS_END | DMA_CS_RESET;
@@ -215,7 +244,11 @@ void dma_initialize()
 			return;
 		}
 
+#ifdef DMA_CHECKING
+		physical_cb_base = mem_virt_to_phys(cb_base,0);
+#else
 		physical_cb_base = mem_virt_to_phys(cb_base);
+#endif
 		cb_base->NEXTCONBK = 0;
 
 		//move DMA pointer to desired channel
@@ -240,48 +273,99 @@ void dma_copy_multiple(void* from, void* to, uint32_t len, uint32_t skip, uint32
 {
 	dma_WaitComplete(0);
 
-	cb_base->TI = DMA_TI_NO_WIDE_BURSTS | DMA_TI_WAIT_RESP | DMA_TI_DST_INC | DMA_TI_SRC_INC | DMA_TI_2D;
- 	cb_base->SOURCE_AD = mem_virt_to_phys(from);
-	cb_base->DEST_AD = mem_virt_to_phys(to);
-	cb_base->LENGTH = (loop << 16) + len;
-	cb_base->STRIDE = skip;
+#ifdef DMA_CHECKING
+	uint32_t numBoundaryCrossingsSrc = (((uint32_t)from + len) >> PAGE_SHIFT) - ((uint32_t)from >> PAGE_SHIFT);
+	uint32_t numBoundaryCrossingsDst = (((uint32_t)to + len) >> PAGE_SHIFT) - ((uint32_t)to >> PAGE_SHIFT);
 
-	if (cb_base->SOURCE_AD && cb_base->DEST_AD && cb_base->LENGTH)
+	uint32_t numContiguousSrc, numContiguousDst;
+
+	uint32_t physicalSrc = mem_virt_to_phys(from, &numContiguousSrc);
+	uint32_t physicalDest = mem_virt_to_phys(to, &numContiguousDst);
+
+	// Can we do a transfer in one hit?
+	if (numContiguousSrc >= numBoundaryCrossingsSrc && numContiguousDst >= numBoundaryCrossingsDst && physicalSrc && physicalDest)
 	{
+
+		cb_base->TI = DMA_TI_NO_WIDE_BURSTS | DMA_TI_WAIT_RESP | DMA_TI_DST_INC | DMA_TI_SRC_INC;
+ 		cb_base->SOURCE_AD = physicalSrc;
+		cb_base->DEST_AD = physicalDest;
+		cb_base->LENGTH = len;
+		cb_base->STRIDE = skip;
+		
 		//start the transfer
 		dma_reg[DMA_CONBLK_AD] = (uint32_t)physical_cb_base;
 		dma_reg[DMA_CS] |= DMA_CS_ACTIVE;
 	}
 	else
 	{
-		DebugMessage(M64MSG_ERROR, "DMA error: 0x%X to 0x%X len %d",cb_base->SOURCE_AD, cb_base->DEST_AD, cb_base->LENGTH);	
+		DebugMessage(M64MSG_WARNING, "%d dma panic! %p =>%p, length %d. %d %d %d %d", __LINE__, physicalSrc, physicalDest, len, numBoundaryCrossingsSrc, numBoundaryCrossingsDst, numContiguousSrc, numContiguousDst); 
+		
+		unsigned int j;
+		for(j=0; j<loop; j++) 
+		{
+			memcpy(to, from, len);
+
+			to += len/4;
+			from += (len + skip)/4;
+		}
 	}
+#else
+		cb_base->TI = DMA_TI_NO_WIDE_BURSTS | DMA_TI_WAIT_RESP | DMA_TI_DST_INC | DMA_TI_SRC_INC;
+ 		cb_base->SOURCE_AD = mem_virt_to_phys(from);
+		cb_base->DEST_AD = mem_virt_to_phys(to);
+		cb_base->LENGTH = len;
+		cb_base->STRIDE = skip;
+		
+		//start the transfer
+		dma_reg[DMA_CONBLK_AD] = (uint32_t)physical_cb_base;
+		dma_reg[DMA_CS] |= DMA_CS_ACTIVE;
+#endif
 }
 
 void dma_copy(void* from, void* to, uint32_t len)
 {
 	dma_WaitComplete(0);
+	
+#ifdef DMA_CHECKING
+	uint32_t numBoundaryCrossingsSrc = (((uint32_t)from + len) >> PAGE_SHIFT) - ((uint32_t)from >> PAGE_SHIFT);
+	uint32_t numBoundaryCrossingsDst = (((uint32_t)to + len) >> PAGE_SHIFT) - ((uint32_t)to >> PAGE_SHIFT);
 
-	DebugMessage(M64MSG_INFO, "dma_copy() starting"); 
+	uint32_t numContiguousSrc, numContiguousDst;
 
-	cb_base->TI = DMA_TI_NO_WIDE_BURSTS | DMA_TI_WAIT_RESP | DMA_TI_DST_INC | DMA_TI_SRC_INC;
- 	cb_base->SOURCE_AD = mem_virt_to_phys(from);
-	cb_base->DEST_AD = mem_virt_to_phys(to);
-	cb_base->LENGTH = len;
-	cb_base->STRIDE = 0;
-
-	if (cb_base->SOURCE_AD && cb_base->DEST_AD && cb_base->LENGTH)
+	uint32_t physicalSrc = mem_virt_to_phys(from, &numContiguousSrc);
+	uint32_t physicalDest = mem_virt_to_phys(to, &numContiguousDst);
+	
+	// Can we do a transfer in one hit?
+	if (numContiguousSrc >= numBoundaryCrossingsSrc && numContiguousDst >= numBoundaryCrossingsDst && physicalSrc && physicalDest)
 	{
+		cb_base->TI = DMA_TI_NO_WIDE_BURSTS | DMA_TI_WAIT_RESP | DMA_TI_DST_INC | DMA_TI_SRC_INC;
+ 		cb_base->SOURCE_AD = physicalSrc;
+		cb_base->DEST_AD = physicalDest;
+		cb_base->LENGTH = len;
+		cb_base->STRIDE = 0;
+		
 		//start the transfer
 		dma_reg[DMA_CONBLK_AD] = (uint32_t)physical_cb_base;
 		dma_reg[DMA_CS] |= DMA_CS_ACTIVE;
 	}
 	else
 	{
-		DebugMessage(M64MSG_ERROR, "DMA error: 0x%X to 0x%X len %d",cb_base->SOURCE_AD, cb_base->DEST_AD, cb_base->LENGTH);	
+		DebugMessage(M64MSG_WARNING, "%d dma panic! %p =>%p, length %d. %d %d %d %d", __LINE__, physicalSrc, physicalDest, len, numBoundaryCrossingsSrc, numBoundaryCrossingsDst, numContiguousSrc, numContiguousDst); 
+		memcpy(to, from, len);
 	}
-}
+#else
+	cb_base->TI = DMA_TI_NO_WIDE_BURSTS | DMA_TI_WAIT_RESP | DMA_TI_DST_INC | DMA_TI_SRC_INC;
+	cb_base->SOURCE_AD = mem_virt_to_phys(from);
+	cb_base->DEST_AD = mem_virt_to_phys(to);
+	cb_base->LENGTH = len;
+	cb_base->STRIDE = 0;
+	
+	//start the transfer
+	dma_reg[DMA_CONBLK_AD] = (uint32_t)physical_cb_base;
+	dma_reg[DMA_CS] |= DMA_CS_ACTIVE;
 #endif
+}
+#endif //M64P_ALLOCATE_MEMORY
 
 void dma_close(void)
 {
@@ -350,19 +434,22 @@ void dma_pi_read(void)
         if (flashram_info.use_flashram != 1)
         {
             sram_read_file();
-
-			//PRINT_DMA_MSG(M64MSG_INFO, "DMA %d %d %x > %x", __LINE__, pi_register.pi_rd_len_reg & 0xFFFFFF, rdram, sram );
-
-#if defined(M64P_ALLOCATE_MEMORY) && 0
-			if (2 == dmaMode)
+#ifdef DMA_TIMING
+			struct timeval ts,te;
+			gettimeofday(&ts,NULL);
+#endif			
+#if defined(M64P_ALLOCATE_MEMORY)
+			if (2 == dmaMode && (pi_register.pi_rd_len_reg & 0xFFFFFF)+1 > DMA_SW_THRESHOLD)
 			{
-				DebugMessage(M64MSG_INFO, "dma_pi_read %p => %p (%d %d)", 
-					&rdram[pi_register.pi_dram_addr_reg], 
+				/*DebugMessage(M64MSG_INFO, "dma_pi_read %p => %p (%d %d), pi_register.pi_dram_addr_reg %x, %x", 
+					&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], 
 					&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF],
-					rdram[pi_register.pi_dram_addr_reg], 
-					sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF]);
-
-				dma_copy(&rdram[pi_register.pi_dram_addr_reg], &sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], (pi_register.pi_rd_len_reg & 0xFFFFFF)+1);
+					((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], 
+					sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF],
+					pi_register.pi_dram_addr_reg,
+					(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF);
+*/
+				dma_copy(&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], &sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], (pi_register.pi_rd_len_reg & 0xFFFFFF)+1);
 				
 				/*DebugMessage(M64MSG_INFO, "dma_pi_read %p => %p (%d %d)", 
 					&rdram[pi_register.pi_dram_addr_reg], 
@@ -370,12 +457,12 @@ void dma_pi_read(void)
 					rdram[pi_register.pi_dram_addr_reg], 
 					sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF]);*/
 			}
-			else if (1 == dmaMode)
+			else if (dmaMode)
 #else
 			if (dmaMode)
 #endif
 			{
-				memcpy(&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], &rdram[pi_register.pi_dram_addr_reg], (pi_register.pi_rd_len_reg & 0xFFFFFF)+1);
+				memcpy(&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], &((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], (pi_register.pi_rd_len_reg & 0xFFFFFF)+1);
 			}
 			else
 			{
@@ -386,6 +473,10 @@ void dma_pi_read(void)
 		                ((unsigned char*)rdram)[(pi_register.pi_dram_addr_reg+i)^S8];
 		        }
 			}
+#ifdef DMA_TIMING
+			gettimeofday(&te,NULL);
+			DebugMessage(M64MSG_INFO, "%d dma took %dus for length %d", __LINE__, 1000000 * te.tv_sec + te.tv_usec - (1000000 * ts.tv_sec + ts.tv_usec), (pi_register.pi_rd_len_reg & 0xFFFFFF)+1 );
+#endif
 			sram_write_file();
 
             flashram_info.use_flashram = -1;
@@ -418,18 +509,23 @@ void dma_pi_write(void)
             if (flashram_info.use_flashram != 1)
             {
                 sram_read_file();
-
+#ifdef DMA_TIMING
+				struct timeval ts,te;
+				gettimeofday(&ts,NULL);
+#endif
 				//PRINT_DMA_MSG(M64MSG_INFO, "DMA %d %d %x > %x", __LINE__, pi_register.pi_wr_len_reg & 0xFFFFFF, sram, rdram );
-#if defined(M64P_ALLOCATE_MEMORY)  && 0
-				if (2 == dmaMode)
+#if defined(M64P_ALLOCATE_MEMORY)
+				if (2 == dmaMode && (pi_register.pi_wr_len_reg & 0xFFFFFF)+1 > DMA_SW_THRESHOLD)
 				{
-					DebugMessage(M64MSG_INFO, "dma_pi_write %p => %p (%d %d)", 
+					/*DebugMessage(M64MSG_INFO, "dma_pi_write %p => %p (%d %d), pi_register.pi_dram_addr_reg %x, %x", 
 						&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], 
-						&rdram[pi_register.pi_dram_addr_reg],
+						&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg],
 						sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], 
-						rdram[pi_register.pi_dram_addr_reg]);
+						((unsigned char*)rdram)[pi_register.pi_dram_addr_reg],
+						(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF,
+						pi_register.pi_dram_addr_reg);*/
 
-					dma_copy(&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], &rdram[pi_register.pi_dram_addr_reg], (pi_register.pi_wr_len_reg & 0xFFFFFF)+1);
+					dma_copy(&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], &((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], (pi_register.pi_wr_len_reg & 0xFFFFFF)+1);
 
 					/*DebugMessage(M64MSG_INFO, "dma_pi_write %p => %p (%d %d)", 
 						&sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], 
@@ -437,12 +533,12 @@ void dma_pi_write(void)
 						sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], 
 						rdram[pi_register.pi_dram_addr_reg]);*/
 				}
-				else if (1 == dmaMode)
+				else if (dmaMode)
 #else
 				if (dmaMode)
 #endif
 				{
-					memcpy(&rdram[pi_register.pi_dram_addr_reg], &sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], (pi_register.pi_wr_len_reg & 0xFFFFFF)+1);
+					memcpy(&((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], &sram[(pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF], (pi_register.pi_wr_len_reg & 0xFFFFFF)+1);
 				}
 				else
 				{
@@ -452,7 +548,10 @@ void dma_pi_write(void)
 		                    sram[(((pi_register.pi_cart_addr_reg-0x08000000)&0xFFFF)+i)^S8];
 		            }
 				}
-
+#ifdef DMA_TIMING
+				gettimeofday(&te,NULL);
+				DebugMessage(M64MSG_INFO, "%d dma took %dus for length %d", __LINE__, 1000000 * te.tv_sec + te.tv_usec - (1000000 * ts.tv_sec + ts.tv_usec), (pi_register.pi_rd_len_reg & 0xFFFFFF)+1 );
+#endif
                 flashram_info.use_flashram = -1;
             }
             else
@@ -509,7 +608,7 @@ void dma_pi_write(void)
 		//PRINT_DMA_MSG(M64MSG_INFO, "dma.c:%d 0x%08X 0x%08X, longueur = %d", __LINE__, &((unsigned char*)rdram)[pi_register.pi_dram_addr_reg], &rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], longueur );
 
 #if defined(M64P_ALLOCATE_MEMORY) && 0
-		if (2 == dmaMode)
+		if (2 == dmaMode && longueur > DMA_SW_THRESHOLD)
 		{
 			DebugMessage(M64MSG_INFO, "dma_pi_write2 %p => %p (%d %d)", 
 					&rom[((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)], 
@@ -526,7 +625,7 @@ void dma_pi_write(void)
 					rom[((pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF)], 
 					((unsigned char*)rdram)[pi_register.pi_dram_addr_reg]);
 		}
-		else if (1 == dmaMode)
+		else if (dmaMode)
 #else
 		if (dmaMode)
 #endif
@@ -583,10 +682,10 @@ void dma_pi_write(void)
 		    }
 		}   
 	}
-    else
+    else //(r4300emu == CORE_PURE_INTERPRETER)
     {
 #if defined(M64P_ALLOCATE_MEMORY) && 0
-		if (2 == dmaMode)
+		if (2 == dmaMode && longueur > DMA_SW_THRESHOLD)
 		{
 			DebugMessage(M64MSG_INFO, "dma_pi_write3 %p => %p (%d %d)", 
 					&rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], 
@@ -603,7 +702,7 @@ void dma_pi_write(void)
 					rom[(pi_register.pi_cart_addr_reg-0x10000000)&0x3FFFFFF], 
 					((unsigned char*)rdram)[pi_register.pi_dram_addr_reg]);
 		}
-		else if (1 == dmaMode)
+		else if (dmaMode)
 #else
 		if (dmaMode)
 #endif
@@ -679,18 +778,23 @@ void dma_sp_write(void)
     unsigned char *dram = (unsigned char*)rdram;
 
 	//PRINT_DMA_MSG(M64MSG_INFO, "DMA:%d, %x << %x, len=%d, count=%d, skip=%d", __LINE__, &spmem[memaddr], &dram[dramaddr], length, count, skip);
+#ifdef DMA_TIMING
+	struct timeval ts,te;
+	gettimeofday(&ts,NULL);
+#endif
 
 #ifdef M64P_ALLOCATE_MEMORY
-	if (2 == dmaMode)
+	if (2 == dmaMode && length > DMA_SW_THRESHOLD)
 	{
 		//DebugMessage(M64MSG_INFO, "dma_sp_write %p => %p (%d %d)", &dram[dramaddr], &spmem[memaddr], *(int*)&dram[dramaddr], *(int*)&spmem[memaddr]);
 		dma_copy_multiple(&dram[dramaddr], &spmem[memaddr], length,skip, count);
 		//dma_WaitComplete(0);
 		//DebugMessage(M64MSG_INFO, "dma_sp_write %p => %p (%d %d)\n", &dram[dramaddr], &spmem[memaddr], *(int*)&dram[dramaddr], *(int*)&spmem[memaddr]);
-		return;
 	}
-#endif
+	else if (dmaMode)
+#else
 	if (dmaMode)
+#endif
 	{
 		unsigned int j;
 		for(j=0; j<count; j++) 
@@ -714,6 +818,10 @@ void dma_sp_write(void)
 			dramaddr+=skip;
 		}
 	}
+#ifdef DMA_TIMING
+	gettimeofday(&te,NULL);
+	DebugMessage(M64MSG_INFO, "%d dma took %dus for length %d", __LINE__, 1000000 * te.tv_sec + te.tv_usec - (1000000 * ts.tv_sec + ts.tv_usec), length );
+#endif
 }
 
 void dma_sp_read(void)
@@ -731,18 +839,22 @@ void dma_sp_read(void)
     unsigned char *dram = (unsigned char*)rdram;
 
 	//PRINT_DMA_MSG(M64MSG_INFO, "DMA:%d, %x << %x, len=%d, count=%d, skip=%d", __LINE__, &spmem[memaddr], &dram[dramaddr], length, count, skip);
-
+#ifdef DMA_TIMING
+	struct timeval ts,te;
+	gettimeofday(&ts,NULL);
+#endif
 #ifdef M64P_ALLOCATE_MEMORY
-	if (2 == dmaMode)
+	if (2 == dmaMode && length > DMA_SW_THRESHOLD)
 	{
 		//DebugMessage(M64MSG_INFO, "dma_sp_read 0x%x => 0x%x", *(int*)&spmem[memaddr], *(int*)&dram[dramaddr]);
 		dma_copy_multiple(&spmem[memaddr], &dram[dramaddr], length, skip, count);
 		//dma_WaitComplete(0);
 		//DebugMessage(M64MSG_INFO, "dma_sp_read 0x%x => 0x%x", *(int*)&spmem[memaddr], *(int*)&dram[dramaddr]);
-		return;
 	}
-#endif
+	else if (dmaMode)
+#else
 	if (dmaMode)
+#endif
 	{
 		unsigned int j;
 		for(j=0; j<count; j++) 
@@ -765,6 +877,10 @@ void dma_sp_read(void)
 		    dramaddr+=skip;
 		}
 	}
+#ifdef DMA_TIMING
+	gettimeofday(&te,NULL);
+	DebugMessage(M64MSG_INFO, "%d dma took %dus for length %d", __LINE__, 1000000 * te.tv_sec + te.tv_usec - (1000000 * ts.tv_sec + ts.tv_usec), length );
+#endif
 }
 
 void dma_si_write(void)

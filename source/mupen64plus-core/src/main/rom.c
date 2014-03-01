@@ -142,7 +142,9 @@ m64p_error open_rom(const unsigned char* romimage, unsigned int size)
     g_MemHasBeenBSwapped = 0;
     /* allocate new buffer for ROM and copy into this buffer */
     rom_size = size;
-    rom = (unsigned char *) malloc(size);
+
+	Allocate_Memory(rom_size, (void**)&rom);
+
     if (rom == NULL)
         return M64ERR_NO_MEMORY;
     memcpy(rom, romimage, size);
@@ -222,8 +224,10 @@ m64p_error close_rom(void)
     if (rom == NULL)
         return M64ERR_INVALID_STATE;
 
+#ifndef M64P_ALLOCATE_MEMORY
     free(rom);
     rom = NULL;
+#endif
 
     /* Clear Byte-swapped flag, since ROM is now deleted. */
     g_MemHasBeenBSwapped = 0;

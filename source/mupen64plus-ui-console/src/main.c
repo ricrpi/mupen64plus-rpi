@@ -624,6 +624,9 @@ int main(int argc, char *argv[])
         return 5;
     }
 
+	if ((*CoreDoCommand)(M64CMD_CORE_STATE_SET, M64CORE_UI_VERBOSE, &g_Verbose) != M64ERR_SUCCESS)
+                DebugMessage(M64MSG_ERROR, "core gave error while setting/unsetting verbose print");
+
     /* Handle the core comparison feature */
     if (l_CoreCompareMode != 0 && !(g_CoreCapabilities & M64CAPS_CORE_COMPARE))
     {
