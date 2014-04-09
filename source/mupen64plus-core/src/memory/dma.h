@@ -22,19 +22,12 @@
 #ifndef DMA_H
 #define DMA_H
 
-void dma_copy_multiple(void* from, void* to, unsigned int len, unsigned int skip, unsigned int loop);
-void dma_copy(void* from, void* to, unsigned int len);
-
-void dma_WaitComplete(unsigned int type);
-void dma_initialize(void);
 void dma_pi_write(void);
 void dma_pi_read(void);
 void dma_si_write(void);
 void dma_si_read(void);
 void dma_sp_write(void);
 void dma_sp_read(void);
-void dma_close(void);
 
-extern unsigned int dmaMode;
 #endif
 

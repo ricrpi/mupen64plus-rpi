@@ -32,7 +32,7 @@
 #include "../ops.h"
 #include "../interupt.h"
 #include "new_dynarec.h"
-#include "../../memory/dma.h"
+
 #include "../../memory/memory.h"
 #include "../../main/rom.h"
 
@@ -7545,11 +7545,19 @@ static void disassemble_inst(int i)
 
 void new_dynarec_init()
 {
+  DebugMessage(M64MSG_INFO, "Init new dynarec");
+
+#if NEW_DYNAREC == NEW_DYNAREC_ARM
   if ((base_addr = mmap ((u_char *)BASE_ADDR, 1<<TARGET_SIZE_2,
             PROT_READ | PROT_WRITE | PROT_EXEC,
-            MAP_PRIVATE | MAP_ANONYMOUS | MAP_LOCKED | MAP_FIXED | MAP_NORESERVE,
+            MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
             -1, 0)) <= 0) {DebugMessage(M64MSG_ERROR, "mmap() failed");}
-
+#else
+  if ((base_addr = mmap (NULL, 1<<TARGET_SIZE_2,
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            MAP_PRIVATE | MAP_ANONYMOUS,
+            -1, 0)) <= 0) {DebugMessage(M64MSG_ERROR, "mmap() failed");}
+#endif
   out=(u_char *)base_addr;
 
   rdword=&readmem_dword;

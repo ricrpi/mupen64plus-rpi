@@ -24,11 +24,6 @@
 
 #include "osal/preproc.h"
 
-#define M64P_ALLOCATE_MEMORY
-
-#define PAGE_SIZE               4096
-#define PAGE_SHIFT              12
-
 int init_memory(int DoByteSwap);
 void free_memory(void);
 #define read_word_in_memory() readmem[address>>16]()
@@ -39,48 +34,14 @@ void free_memory(void);
 #define write_byte_in_memory() writememb[address >>16]()
 #define write_hword_in_memory() writememh[address >>16]()
 #define write_dword_in_memory() writememd[address >>16]()
-
-typedef struct {
-        unsigned int physaddr;
-		unsigned int numContiguous;
-} page_map_t;
-
-// The CB is copied by the dma controller into its own registers
-typedef struct {
-    unsigned int TI;
-    unsigned int SOURCE_AD;
-    unsigned int DEST_AD;
-    unsigned int LENGTH;
-    unsigned int STRIDE;
-    unsigned int NEXTCONBK;
-} dma_cb_t;
-
+extern unsigned int SP_DMEM[0x1000/4*2];
 extern unsigned char *SP_DMEMb;
 extern unsigned int *SP_IMEM;
 extern unsigned char *SP_IMEMb;
+extern unsigned int PIF_RAM[0x40/4];
 extern unsigned char *PIF_RAMb;
-extern unsigned char *rdramb;
 
-
-#ifndef M64P_ALLOCATE_MEMORY
-	extern ALIGN(16, unsigned int rdram[0x800000/4]);
-	extern unsigned int SP_DMEM[0x1000/4*2];			//includes SP_IMEM
-	extern unsigned int PIF_RAM[0x40/4];
-#else
-	extern unsigned int* rdram;
-	extern unsigned int* SP_DMEM;
-	extern unsigned int* PIF_RAM;
-	extern unsigned char* sram;
-	
-	extern volatile unsigned char* n64_memory;
-	extern page_map_t* n64_memory_map;
-	extern dma_cb_t* cb_base;
-	 
-	#define M64P_MEMORY_SIZE (0x800000 + 0x1000*2 + 0x40 + 0x8000 + 4096)
-#endif
-
-extern int Allocate_Memory(unsigned int rom_size, void** rom_mem);
-
+extern ALIGN(16, unsigned int rdram[0x800000/4]);
 
 extern unsigned int address, word;
 extern unsigned char cpu_byte;

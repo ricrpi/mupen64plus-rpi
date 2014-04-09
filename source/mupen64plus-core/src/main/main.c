@@ -40,7 +40,6 @@
 #include "api/m64p_config.h"
 #include "api/debugger.h"
 #include "api/vidext.h"
-#include "r4300/new_dynarec/assem_arm.h"
 
 #include "main.h"
 #include "eventloop.h"
@@ -48,9 +47,7 @@
 #include "savestates.h"
 #include "util.h"
 
-#include "memory/dma.h"
 #include "memory/memory.h"
-
 #include "osal/files.h"
 #include "osal/preproc.h"
 #include "osd/osd.h"
@@ -93,8 +90,6 @@ static int   l_MainSpeedLimit = 1;       // insert delay during vi_interrupt to 
 static osd_message_t *l_msgVol = NULL;
 static osd_message_t *l_msgFF = NULL;
 static osd_message_t *l_msgPause = NULL;
-
-extern int g_Verbose;
 
 /*********************************************************************************************************
 * static functions
@@ -203,8 +198,7 @@ int main_set_core_defaults(void)
     ConfigSetDefaultString(g_CoreConfig, "SaveSRAMPath", "", "Path to directory where SRAM/EEPROM data (in-game saves) are stored. If this is blank, the default value of ${UserConfigPath}/save will be used");
     ConfigSetDefaultString(g_CoreConfig, "SharedDataPath", "", "Path to a directory to search when looking for shared data files");
 	ConfigSetDefaultInt(g_CoreConfig, "Scheduler", 10, "Scheduling policy. 0 for Standard (SCHED_OTHER), 1-99 RealTime FIFO policy with Priority of [N]");
-    ConfigSetDefaultInt(g_CoreConfig, "DMA_MODE", 1, "DMA mode. 0 Original Software method (Endian and Alignment aware), 1 Faster Software, 2 Hardware"); // , 3 Hardware with reserved RAM (kernel must boot with mem=224/480M max_mem=256/512M$#");
-
+    
 	/* handle upgrades */
     if (bUpgrade)
     {
@@ -465,8 +459,6 @@ m64p_error main_core_state_query(m64p_core_param param, int *rval)
         case M64CORE_INPUT_GAMESHARK:
             *rval = event_gameshark_active();
             break;
-		case M64CORE_UI_VERBOSE:
-			*rval = g_Verbose;
         // these are only used for callbacks; they cannot be queried or set
         case M64CORE_STATE_LOADCOMPLETE:
         case M64CORE_STATE_SAVECOMPLETE:
@@ -562,14 +554,10 @@ m64p_error main_core_state_set(m64p_core_param param, int val)
                 return M64ERR_INVALID_STATE;
             event_set_gameshark(val);
             return M64ERR_SUCCESS;
-		case M64CORE_UI_VERBOSE:
-			g_Verbose = val;
-			return M64ERR_SUCCESS;
         // these are only used for callbacks; they cannot be queried or set
         case M64CORE_STATE_LOADCOMPLETE:
         case M64CORE_STATE_SAVECOMPLETE:
             return M64ERR_INPUT_INVALID;
-
         default:
             return M64ERR_INPUT_INVALID;
     }
@@ -697,7 +685,6 @@ void new_vi(void)
     static unsigned int CounterTime = 0;
     static unsigned int CalculatedTime ;
     static int VI_Counter = 0;
-	
 
     double VILimitMilliseconds = 1000.0 / ROM_PARAMS.vilimit;
     double AdjustedLimit = VILimitMilliseconds * 100.0 / l_SpeedFactor;  // adjust for selected emulator speed
@@ -780,6 +767,8 @@ m64p_error main_run(void)
 				DebugMessage(M64MSG_WARNING, "Could not run as SCHED_FIFO, priority %d, error %d", SchedulerPriority, e);
 			}
 		}
+		
+		
 	}
 
     /* set some other core parameters based on the config file values */
@@ -816,8 +805,6 @@ m64p_error main_run(void)
     /* set up the SDL key repeat and event filter to catch keyboard/joystick commands for the core */
     event_initialize();
 
-	dma_initialize();
-
     /* initialize the on-screen display */
     if (ConfigGetParamBool(g_CoreConfig, "OnScreenDisplay"))
     {
@@ -838,10 +825,10 @@ m64p_error main_run(void)
     if (ConfigGetParamBool(g_CoreConfig, "EnableDebugger"))
         init_debugger();
 #endif
-	DebugMessage(M64MSG_INFO, "start time %d", SDL_GetTicks());
 
     /* Startup message on the OSD */
     osd_new_message(OSD_MIDDLE_CENTER, "Mupen64Plus Started...");
+
 
     g_EmulatorRunning = 1;
     StateChanged(M64CORE_EMU_STATE, M64EMU_RUNNING);
@@ -849,7 +836,12 @@ m64p_error main_run(void)
     /* call r4300 CPU core and run the game */
     r4300_reset_hard();
     r4300_reset_soft();
-    r4300_execute();
+
+	DebugMessage(M64MSG_INFO, "Starting emulation at %u", SDL_GetTicks());
+    
+	r4300_execute();
+
+	DebugMessage(M64MSG_INFO, "Stopping emulation at %u", SDL_GetTicks());
 
     /* now begin to shut down */
 #ifdef WITH_LIRC
@@ -866,15 +858,11 @@ m64p_error main_run(void)
         osd_exit();
     }
 
-	DebugMessage(M64MSG_INFO, "end time %d", SDL_GetTicks());
-
     rsp.romClosed();
     input.romClosed();
     audio.romClosed();
     gfx.romClosed();
     free_memory();
-
-	dma_close();
 
     // clean up
     g_EmulatorRunning = 0;

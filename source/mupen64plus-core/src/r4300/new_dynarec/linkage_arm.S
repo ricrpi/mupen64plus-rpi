@@ -97,7 +97,7 @@
 	.size	extra_memory, 33554432
 extra_memory:
 	.skip	33554432+64+16+16+8+8+8+8+256+8+8+128+128+128+16+8+132+4+256+512+4194304
-dynarec_local = extra_memory + 33554432 
+dynarec_local = extra_memory + 33554432
 	.type	dynarec_local, %object
 	.size	dynarec_local, 64
 next_interupt = dynarec_local + 64
