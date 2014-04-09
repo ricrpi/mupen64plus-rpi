@@ -86,7 +86,7 @@ static int   l_TakeScreenshot = 0;       // Tell OSD Rendering callback to take 
 static int   l_SpeedFactor = 100;        // percentage of nominal game speed at which emulator is running
 static int   l_FrameAdvance = 0;         // variable to check if we pause on next frame
 static int   l_MainSpeedLimit = 1;       // insert delay during vi_interrupt to keep speed at real-time
-
+static int   l_Verbose = 1;
 static osd_message_t *l_msgVol = NULL;
 static osd_message_t *l_msgFF = NULL;
 static osd_message_t *l_msgPause = NULL;
@@ -133,6 +133,7 @@ const char *get_savesrampath(void)
 
 void main_message(m64p_msg_level level, unsigned int corner, const char *format, ...)
 {
+	if (level == M64MSG_VERBOSE && !l_Verbose) return;
     va_list ap;
     char buffer[2049];
     va_start(ap, format);
@@ -554,6 +555,9 @@ m64p_error main_core_state_set(m64p_core_param param, int val)
                 return M64ERR_INVALID_STATE;
             event_set_gameshark(val);
             return M64ERR_SUCCESS;
+		case M64CORE_UI_VERBOSE:
+			l_Verbose = val;
+			return M64ERR_SUCCESS;
         // these are only used for callbacks; they cannot be queried or set
         case M64CORE_STATE_LOADCOMPLETE:
         case M64CORE_STATE_SAVECOMPLETE:
