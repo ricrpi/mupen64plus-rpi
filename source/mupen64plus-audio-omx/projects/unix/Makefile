@@ -140,6 +140,10 @@ ifeq ($(BIG_ENDIAN), 1)
   CFLAGS += -DM64P_BIG_ENDIAN
 endif
 
+ifeq ($(EXT_CFG), 1)
+  CFLAGS += -DEXT_CFG
+endif
+
 # tweak flags for 32-bit build on 64-bit system
 ifeq ($(ARCH_DETECTED), 64BITS_32)
   ifeq ($(OS), FREEBSD)

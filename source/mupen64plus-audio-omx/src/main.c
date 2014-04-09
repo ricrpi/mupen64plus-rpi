@@ -61,7 +61,7 @@ extern uint32_t SDL_GetTicks(void);
 	MODE 3 is to use 11025, 22050, 44100 if > ROM frequency
 	MODE N is the frequency to use for sound output
  */
-#define DEFAULT_MODE 1
+#define DEFAULT_MODE 0
 
 /* Default audio output on HDMI (1) or analogue port (0) */
 #define OUTPUT_PORT 1
@@ -125,7 +125,7 @@ static uint32_t uiNumBuffers = DEFAULT_NUM_BUFFERS;
 
 static uint32_t	bNative = 1;
 
-static uint32_t uiUnderrunMode = 0;
+static uint32_t uiUnderrunMode = 1;
 
 static uint32_t critical_failure = 0;
 
@@ -283,12 +283,16 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle, void *Con
 	ConfigSetDefaultInt(l_ConfigAudio, 	"DEFAULT_FREQUENCY",    DEFAULT_FREQUENCY,     		"Frequency which is used if rom doesn't want to change it");
 	ConfigSetDefaultBool(l_ConfigAudio, "SWAP_CHANNELS",        0,                     		"Swaps left and right channels");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"OUTPUT_PORT",   		OUTPUT_PORT,   				"Audio output to go to (0) Analogue jack, (1) HDMI");
-	ConfigSetDefaultBool(l_ConfigAudio, "NATIVE_MODE",       	bNative,                    "Point OMX to the raw N64 audio data region instead of copying audio into buffer. Overrides SECONDARY_BUFFER_SIZE, DEFAULT_MODE and LATENCY");
+	
+#ifdef EXT_CFG
+ConfigSetDefaultBool(l_ConfigAudio, "NATIVE_MODE",       	bNative,                    "Point OMX to the raw N64 audio data region instead of copying audio into buffer. Overrides SECONDARY_BUFFER_SIZE, DEFAULT_MODE and LATENCY");
 	ConfigSetDefaultInt(l_ConfigAudio, 	"BUFFER_SIZE",DEFAULT_BUFFER_SIZE, 		"Number of output samples per Audio callback. This is for hardware buffers.");
+#endif	
 	ConfigSetDefaultInt(l_ConfigAudio, 	"DEFAULT_MODE",     	DEFAULT_MODE,          		"Audio Output Frequncy mode: 0 = Rom Frequency, 1 ROM Frequency if supported (HDMI only), 2 = Standard frequency < Rom Frequency, 3 = Standard frequency > Rom Frequency, [N] Force output frequency");
+#ifdef EXT_CFG	
 	ConfigSetDefaultInt(l_ConfigAudio, 	"LATENCY",      		DEFAULT_LATENCY,           	"Desired Latency in ms");
 	ConfigSetDefaultInt(l_ConfigAudio,	"UNDERRUN_MODE",		uiUnderrunMode,				"Underrun Mode, 0 = Ignore, 1 = Report, 2 = repeat audio when latency < LATENCY/2");
-
+#endif
 	if (bSaveConfig && ConfigAPIVersion >= 0x020100)
 		ConfigSaveSection("Audio-OMX");
 
@@ -851,13 +855,17 @@ static void InitializeAudio(int freq)
 	if (critical_failure) return;
 	GameFreq = freq;
 
-
 	int buffer_size = (uiSecondaryBufferSamples * 4);
 
 	switch (uiOutputFrequencyMode)
 	{
 	case 0:										// Select Frequency ROM requests
 		OutputFreq = freq;
+
+		#ifndef EXT_CFG
+		if (uiOutputPort == 1) bNative = 1;	//HDMI
+		#endif
+
 		break;
 	case 1:										//Audo
 		if (uiOutputPort == 1)
@@ -1002,17 +1010,18 @@ EXPORT void CALL SetSpeedFactor(int percentage)
 static void ReadConfig(void)
 {
 	/* read the configuration values into our static variables */
-	GameFreq = 					ConfigGetParamInt(l_ConfigAudio, "DEFAULT_FREQUENCY");
-	bSwapChannels = 			ConfigGetParamBool(l_ConfigAudio, "SWAP_CHANNELS");
+#ifdef EXT_CFG
 	bNative = 					ConfigGetParamBool(l_ConfigAudio, "NATIVE_MODE");
 	uiSecondaryBufferSamples = 	ConfigGetParamInt(l_ConfigAudio, "BUFFER_SIZE");
-	uiOutputPort = 				ConfigGetParamInt(l_ConfigAudio, "OUTPUT_PORT");
 	uiLatency = 				ConfigGetParamInt(l_ConfigAudio, "LATENCY");
-	uiOutputFrequencyMode = 	ConfigGetParamInt(l_ConfigAudio, "DEFAULT_MODE");
 	uiUnderrunMode = 			ConfigGetParamInt(l_ConfigAudio, "UNDERRUN_MODE");
-
 	if (uiLatency <= MIN_LATENCY_TIME) uiLatency = MIN_LATENCY_TIME + 1;
+#endif
 
+	GameFreq = 					ConfigGetParamInt(l_ConfigAudio, "DEFAULT_FREQUENCY");
+	bSwapChannels = 			ConfigGetParamBool(l_ConfigAudio, "SWAP_CHANNELS");
+	uiOutputPort = 				ConfigGetParamInt(l_ConfigAudio, "OUTPUT_PORT");
+	uiOutputFrequencyMode = 	ConfigGetParamInt(l_ConfigAudio, "DEFAULT_MODE");	
 }
 
 // Sets the volume level based on the contents of VolPercent and VolIsMuted
