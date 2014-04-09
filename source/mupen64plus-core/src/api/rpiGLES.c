@@ -186,7 +186,6 @@ static void restoreKeyboard()
 void ForceClose(int val)
 {
 	DEBUG_PRINT("signal %d, restoring keyboard\n", val);
-	dma_close();
 	restoreKeyboard();
 }
 
@@ -225,7 +224,7 @@ static int setupKeyboard()
 
     ioctl(0, KDSKBMODE, K_RAW);
 	key_mode = CONSOLE;
-	
+
 
 	DEBUG_PRINT("Setup keyboard in RAW mode\n");
     return 1;
