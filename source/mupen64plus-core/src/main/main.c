@@ -688,11 +688,16 @@ void new_vi(void)
     static unsigned int LastFPSTime = 0;
     static unsigned int CounterTime = 0;
     static unsigned int CalculatedTime ;
+	static int VItimes[6] = {0,0,0,0,0,0};
+	static unsigned int VItimesIndex = 0;
+	static int VItimesTotal = 0;
+
     static int VI_Counter = 0;
 
     double VILimitMilliseconds = 1000.0 / ROM_PARAMS.vilimit;
     double AdjustedLimit = VILimitMilliseconds * 100.0 / l_SpeedFactor;  // adjust for selected emulator speed
     int time;
+
 
     start_section(IDLE_SECTION);
     VI_Counter++;
@@ -707,17 +712,23 @@ void new_vi(void)
         return;
     }
     CurrentFPSTime = SDL_GetTicks();
-    
+
     Dif = CurrentFPSTime - LastFPSTime;
-    
-    if (Dif < AdjustedLimit) 
+
+    CalculatedTime = (unsigned int) (CounterTime + AdjustedLimit * VI_Counter);
+    time = (int)(CalculatedTime - CurrentFPSTime);
+
+	VItimesTotal -= VItimes[VItimesIndex];
+	VItimes[VItimesIndex++] = time;
+	VItimesTotal += time;
+	if (VItimesIndex == sizeof(VItimes)/4) VItimesIndex = 0;
+
+    if (Dif < AdjustedLimit)
     {
-        CalculatedTime = (unsigned int) (CounterTime + AdjustedLimit * VI_Counter);
-        time = (int)(CalculatedTime - CurrentFPSTime);
-        if (time > 0 && l_MainSpeedLimit)
+	if (VItimesTotal > 0 && l_MainSpeedLimit)
         {
-            DebugMessage(M64MSG_VERBOSE, "    new_vi(): Waiting %ims", time);
-            SDL_Delay(time);
+            DebugMessage(M64MSG_VERBOSE, "    new_vi(): Waiting %ims", VItimesTotal/6);
+            SDL_Delay(VItimesTotal/6);
         }
         CurrentFPSTime = CurrentFPSTime + time;
     }
@@ -727,7 +738,7 @@ void new_vi(void)
         CounterTime = SDL_GetTicks();
         VI_Counter = 0 ;
     }
-    
+
     LastFPSTime = CurrentFPSTime ;
     end_section(IDLE_SECTION);
 }
